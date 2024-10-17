@@ -1,0 +1,303 @@
+<html><head>
+<meta http-equiv="content-type" content="text/html; charset=windows-1252">
+  <title>nocash mp3 asm decoder</title>
+  <meta name="GENERATOR" content="nocash XED editor">
+  <meta name="Author" content="Nocash Martin Korth">
+</head><body vlink="#0033cc" text="#000000" link="#0033cc" bgcolor="#ffffff" alink="#0033cc">
+<!---------------------->
+<font size="+2">nocash mp3 decoder</font><br>
+Here's my approach on mp3 decoding.
+The project is based on the keyj minimp3 source code,
+manually ported to 80x86 asm code.
+The goals are to figure out how to decode mp3 files, and to make it fast
+enough to work on older hardware.
+<br>
+The current version is for Windows 9x or later, it should work on something like 80486DX2-??MHz (not tested yet).
+I am quite optimistic that I can port it to PSX or GBA consoles.
+That, if neccessary with reduced output quality (but without requiring users to convert their .mp3 files to lower bitrates).
+<br>
+<br>
+<b>Feedback needed...</b><br>
+Before trying to port the code to MIPS or ARM, I would be glad about some
+feedback on the 80x86 version.
+<br>
+<b>Testing:</b> I still need benchmarks for <b>retro PCs</b>
+(like a working 80486DX2-66MHz, or anything from 80386 to Pentium I).
+Please download the .mp3 file (linked in benchmarks section), and run mp3play
+with /test switch, then copy/paste the screen output (the cycle counters may
+be all zero on older PCs, but the millisecond value should work everywhere).
+And, of course, check if the sound comes out okay (if the PC is too slow,
+try using the /fast /mono /half switches).
+<br>
+<b>DOS Version:</b> There's currently only the win32 version
+(but the HXDOS extension should be able to run win32 code in DOS).
+I am also considering to make a native DOS version (but only if 80486 benchmarks
+do confirm that the code could be fast enough to run on yet older PCs).
+<br>
+<b>Code Reviews:</b> Suggestions for making the code faster would be welcome
+(for the overall logic you could look at my asm code, or the keyj minimp3 high
+level code). Maybe there are ways to make the code more straight forward,
+or to get away with fewer multiplications...?<br>
+Something like MMX would be probably faster, but PCs that do support MMX are
+probably fast enough for mp3 anyways (unless one wants to combine audio/video decoding).
+<br>
+<b>Expert Question:</b>
+Mp3 decoders are converting samples from "frequency domain to time 
+domain".
+I don't know if that means what I think, and how and where the code is 
+doing
+that.
+Anyways, could one tweak those frequencies to produce output at 
+different sample
+rates? Like converting 48kHz to 44kHz or 24kHz (if the sound hardware 
+doesn't support 48kHz, or if the CPU is too slow for that).
+<br>
+<b>Forums:</b> I've posted about this project in
+<a href="http://forums.nesdev.org/viewtopic.php?t=25441">nesdev</a> and
+<a href="http://www.psxdev.net/forum/viewtopic.php?f=62&amp;t=4227">psxdev</a> and
+<a href="http://www.vogons.org/viewtopic.php?t=102508">vogons</a>.
+<br>
+<p>
+</p><p></p><hr><!---------------------->
+<font size="+2">80x86 asm decoder</font><br>
+ <a href="https://problemkaputt.de/mp3x86-5.zip">mp3 80x86 asm decoder, version 1.5</a> - 13 Oct 2024 (mp1/mp2 support, tighter caching, faster huffman, better (but slower) mono mode)<br>
+ <a href="https://problemkaputt.de/mp3x86-4.zip">mp3 80x86 asm decoder, version 1.4</a> - 20 Sep 2024 (hopefully fully compatible now, and skips lyrics/ext/tag+/ape/3di)<br>
+ <a href="https://problemkaputt.de/mp3x86-3.zip">mp3 80x86 asm decoder, version 1.3</a> - 11 Sep 2024 (more compatible with newer PCs, and log*.exe with status info)<br>
+ <a href="https://problemkaputt.de/mp3x86-2.zip">mp3 80x86 asm decoder, version 1.2</a> - 08 Sep 2024 (a bit faster, and attempts to be compatible with newer PCs)<br>
+ <a href="https://problemkaputt.de/mp3x86-1.zip">mp3 80x86 asm decoder, version 1.1</a> - 02 Sep 2024 (cleanup, bugfixes, faster, more accurate)<br>
+ <a href="https://problemkaputt.de/mp3x86-0.zip">mp3 80x86 asm decoder, version 1.0</a> - 12 Aug 2024 (messy, with many outcommented code relicts)<br>
+<br>
+The separate files in the .zip package are:
+<table><tbody><tr bgcolor="#eeeeee"><td><pre> mp3.asm         source code for the mp3 decoding functions
+ mp3play.asm     source code for the windows command line tool
+ mp3play.exe     win32 executable with support for all commandline options
+ mp3tiny.exe     win32 executable cutdown kkcrunchy-compressed 9.5Kbyte version
+</pre></td></tr></tbody></table><br>
+There are four output modes, and several optional commandline switches:
+<table><tbody><tr bgcolor="#eeeeee"><td><pre> mp3play "file.mp3"             output to speakers
+ mp3play "file.mp3" /test       measure timings without output
+ mp3play "file.mp3" "file.wav"  output to .wav file
+ mp3play "file.bit" "file.pcm"  verify output against lieff's .pcm files
+ mp3play ... /fast              about 10% faster    (slightly less accurate)
+ mp3play ... /mono              about twice as fast (faster, and still good)
+ mp3play ... /half              half sample rate    (faster, and still good)
+ mp3play ... /quarter           quarter sample rate (doesn't sound so good)
+ mp3play ... /8bit              for old hardware    (good, but not much faster)
+ mp3play ... &gt;"file.txt"        redirect screen output to file (as usually)
+</pre></td></tr></tbody></table><br>
+
+
+<b>80x86 Benchmarks</b><br>
+Below timings are for decoding
+<a href="https://pisse.bandcamp.com/track/fliegerbombe">Pisse - Fliegerbombe.mp3</a>,
+free download without needing to register any account or mailing list,
+MP3 V0, 2,584,725 bytss, 44100 Hz, 234kbit/s.
+<br>
+The timings were measured on a 1GHz Pentium III, showing only the raw
+RAM-to-RAM decoding time (without disk loading and audio output).
+<br>
+<table><tbody><tr bgcolor="#eeeeee"><td><pre> mp3play "Pisse - Fliegerbombe.mp3" /test
+ nocash mp3 decoder v1.1, 2024 martin korth, press ctrl+c to quit, BDS now
+ file: Pisse - Fliegerbombe.mp3
+ file size: 2,584,576, id3 size: 110,453, tag size: 0
+ input: 44100 hz, 2 channels, 234 kbit/s
+ output: 44100 hz, 2 channels, 16 bit
+ audio duration 84,584 milliseconds, decoded in 930 milliseconds
+  clock cycles per second:
+  read header     8,137
+  read extra      5,399
+  read granule    31,900
+  append main     133,763
+  read scalefac   49,550
+  xlat scalefac   100,201
+  read huffman    1,927,429
+  ms stereo       175,986
+  i stereo        0
+  reorder         10,813
+  antialias       498,490
+  imdct           1,517,604
+   imdct36        1,370,519
+   imdct12        16,766
+   imdct0         72,374
+  synth/dct       7,119,406
+   synth.dct32    1,832,372
+   synth.output   5,051,125
+  total           11,645,068
+</pre></td></tr></tbody></table><br>
+Timings for different versions on different processors:<br>
+<table><tbody><tr bgcolor="#eeeeee"><td><pre> version       processor           tester             clks/s (ms)          cpu load
+ mp3play v0.0  Pentium III, 1GHz   nocash         16,xxx,xxx (pre-release) 0.016    ;\
+ mp3play v1.0  Pentium III, 1GHz   nocash         12,190,805 (1019ms)      0.012    ;
+ mp3play v1.1  Pentium III, 1GHz   nocash         11,644,126 (935ms)       0.012    ;
+ mp3play v1.2  Pentium III, 1GHz   nocash         11,477,895 (903ms)       0.011    ;
+ mp3play v1.3  Pentium III, 1GHz   nocash         11,468,126 (899ms)       0.011    ;
+ mp3play v1.4  Pentium III, 1GHz   nocash         11,458,863 (885ms)       0.011    ;
+ mp3play v1.5  Pentium III, 1GHz   nocash         11,204,776 (868ms)       0.011    ;
+ mp3play v1.1  C2D E8600, 3.33GHz  TmEE            7,988,837 (207ms)       0.002    ; perfect
+ mp3play v1.1  i5-4300U, 2.5GHz,   TmEE            6,476,551 (281ms)       0.002    ; quality
+ mp3play v1.1  i7-6700K, 4GHz,     Memblers        6,427,673 (219ms)       0.002    ;
+ mp3play v1.1  i7-9750H, 2.6GHz,   GValiente       4,223,386 (235ms)       0.002    ;
+ mp3play v1.4  Cyrix 5x86, 120MHz  Rav / MSDOS        ~53.4M (37,661ms)    0.445    ;
+ mp3play v1.4  Cyrix 5x86, 120MHz  Many Bothans       ~57.7M (40,663ms)    0.481    ;
+ mp3play v1.4  Cyrix 5x86, 50x2MHz Many Bothans       ~54.3M (45,914ms)    0.542    ;
+ mp3play v1.4  Cyrix 5x86, 33x3MHz Many Bothans       ~57.9M (48,979ms)    0.579    ;
+ mp3play v1.4  Cyrix 5x86, 80MHz   Many Bothans       ~56.7M (59,960ms)    0.708    ;
+ mp3play v1.4  Cyrix 5x86, 66MHz   Many Bothans       ~56.5M (72,499ms)    0.857    ;
+ mp3play v1.4  AMD Am5x86, 160MHz  Many Bothans       ~94.8M (50,126ms)    0.592    ;
+ mp3play v1.4  AMD Am5x86, 150MHz  Many Bothans       ~90.2M (50,855ms)    0.601    ;
+ mp3play v1.4  AMD Am5x86, 133MHz  Many Bothans       ~99.9M (63,540ms)    0.751    ;
+ mp3play v1.4  AMD Am5x86, 120MHz  Many Bothans       ~93.0M (65,610ms)    0.775    ;
+ mp3play v1.4  AMD Am5x86, 100MHz  Many Bothans       ~91.5M (77,355ms)    0.914    ;/
+ mp3play v1.4  AMD Am5x86, 75MHz   Many Bothans       ~91.0M (102,654ms)   1.213    ;\
+ mp3play v1.4  Intel 486DX2, 66MHz Many Bothans       ~91.7M (117,499ms)   1.389    ; good
+ mp3play v1.4  Intel 486DX2, 50MHz Many Bothans       ~92.6M (156,670ms)   1.852    ;/
+ mp3play v1.4  Intel 486SX, 33MHz  Many Bothans       ~87.2M (223,563ms)   2.643    ;-low(?)
+ mp3play v1.4  Intel 486SX, 25MHz  Many Bothans       ~87.6M (296,439ms)   3.504    ;-too slow
+ mp3play       80486DX2-66MHz      -                       ? (more tests welcome)
+ mp3play       80486DX4-100MHz     -                       ? (unknown)
+ mp3play       80386               -                       ? (unknown)
+ mp3play       Pentium I           -                       ? (unknown)
+</pre></td></tr></tbody></table><br>
+
+There are several commandline switches for faster decoding.
+Below timings are from mp3play v1.4 on Pentium III, for above 44100Hz file, and another 48000Hz file.
+<table><tbody><tr bgcolor="#eeeeee"><td><pre> switches                         44100Hz/234kbit/84584ms  48000Hz/256kbit  speed  quality
+ /test                            11,449,871 (899ms)       12,413,478       1.000  perfect
+ /test /fast                      10,165,734 (794ms)       11,015,452       1.127  good
+ /test             /half          8,191,299  (674ms)       8,839,641        1.404  good
+ /test /fast       /half          7,528,040  (605ms)       8,139,875        1.525  good
+ /test /fast /mono                5,246,163  (445ms)       5,679,721        2.185  good
+ /test /fast /mono /half          3,930,032  (320ms)       4,249,539        2.921  good
+ /test /fast /mono /quarter       3,386,091  (268ms)       3,659,921        3.392  low
+ /test /fast /mono /quarter /8bit 3,353,499  (269ms)       3,633,287        3.416  low
+</pre></td></tr></tbody></table><br>
+
+As a last resort, one could resample the mp3 file before playback.
+That's uncomfortable, but a lower samplerate can be much faster
+(than the /half /quarter switches),
+and a lower bitrate can save diskspace (but isn't much faster).
+<table><tbody><tr bgcolor="#eeeeee"><td><pre> source file             switches                          clks/s           speed  quality
+ pisse_44khz_234kbit.mp3 /test                             11,449,871       1.000  perfect
+ pisse_44khz_112kbit.mp3 /test                             10,651,344       1.075  good
+ pisse_22khz_112kbit.mp3 /test                             6,028,984        1.899  good
+ pisse_44khz_112kbit.mp3 /test /fast /mono /half           3,440,489        3.328  good
+ pisse_11khz_56kbit.mp3  /test                             3,034,350        3.773  low
+ pisse_22khz_112kbit.mp3 /test /fast /mono                 2,761,704        4.146  good
+ pisse_22khz_112kbit.mp3 /test /fast /mono /half           2,099,826        5.453  low
+ pisse_11khz_56kbit.mp3  /test /fast /mono                 1,384,470        8.270  low
+</pre></td></tr></tbody></table><br>
+
+And finally, one could switch from mp3 to mp2. This may require a slightly higher bitrate, but can be about 33% faster than mp2.
+The problem is to find mp2 encoders.
+<br>
+Tools like "toolame" or "twolame" pretend to support mp2 encoding, but they're
+usually plain source code without binaries (and even if you can find a win32
+executable: it'll just say that it requires a newer windows version).
+<br>
+The only known working mp2 encoder appears to be
+https://www.rarewares.org/files/mp3/mp2enc.zip (albeit working is relative;
+it can do 44kHz/stereo, but fails on any attempt to encode 22kHz or mono).
+<br>
+Note: mp1 and mp2 are more or less identical: mp1 uses more simplified
+headers, but mp1 uses thrice as many headers per second, and mp1 tends to
+use higher bitrates (overall, mp1 is a bit worse and slower than mp2).
+
+
+
+<p></p><hr><!---------------------->
+<font size="+2">other decoder: fixed-point <a href="https://keyj.emphy.de/minimp3/">keyj minimp3</a>, 2007 Martin J. Fiedler</font><br>
+This is a nice small fixed-point decoder (and is itself based on 
+FFmpeg). It claims to be rather slow, although the code doesn't look 
+bad, apart from a few suboptimal things:
+<br>
+<ul>
+<li>The bitstream reader looks very slow, using the OPEN/CLOSE_READER 
+functions on each and every bitstream access is just crazy, same for 
+UPDATE_READER (although that might work on CPUs with fast cache, and 
+strong support for unaligned big-endian memory accesses).</li>
+<li>There are a few tricks that went wrong, for example the synth 
+function tries to compute two samples at once to avoid an extra memory 
+access (the problem is that 80x86 doesn't have enough CPU registers for 
+such tricks, so the number of memory accesses goes up instead of down).</li>
+<li>The init function uses floating-point, making it very difficult to 
+implement without FPU. The init is rather slow (computing the same 
+values over and over again, only to apply slightly different factors to 
+them), and the pow function looks bugged (calculating 0^n returns 
+-infinite instead of zero).</li>
+<li>The accuracy is fairly good, but could be better (FRAC=15, WFRAC=14 
+isn't optimal, FRAC=18, WFRAC=11 would be more balanced for same 
+OUT_SHIFT, and perfect (but 10% slower) would be FRAC=22, WFRAC=30).</li>
+<li>The intensity_stereo decoding has various bugs (the is_table_lsf is 
+too small, it lacks support for the NO_INTENSITY flag, and the previous 
+scale factor logic looks broken, etc). That's not so much of a problem 
+because intensity_stereo is rarely used, but it's better to replace it 
+by the stereo logic from lieff's decoder.</li>
+<li>The player_win32 sample code is unstable (it doesn't distinguish 
+between WOM_DONE and WOM_OPEN/CLOSE, and manually calls AudioCallback to
+ enqueue the first 8 frames, and actual AudioCallback's can occur 
+simultaneously while executing those manual calls) (easy workaround 
+would be to enclose the first 8 calls in waveOutPause/Restart).</li>
+<li>An executable version did <a href="http://web.archive.org/web/20150923042747/http://keyj.emphy.de/files/projects/minimp3.tar.gz">exist</a>, but it does just crash on my PC (win98), and the auther seems to have deleted it because virus scanners.</li>
+</ul>
+<p></p><hr><!---------------------->
+<font size="+2">other decoder: floating-point <a href="https://github.com/lieff/minimp3/archive/refs/heads/master.zip">lieff minimp3</a>, 2018 lieff</font><br>
+This is another small mp3 decoder, which is confusingly also called 
+minimp3. It's using floating-point, but claims to be very fast and 
+accurate.
+<br>
+<ul>
+<li>The surprisingly fast benchmarks refer to low bitrate mono files, normal mp3's are probably more than twice as slow.</li>
+<li>The absurd fast timings for l3_sin1k0db.bit are because the 
+benchmark table is incorrectly listing it as mono 16 seconds instead of 
+stereo 8 seconds. </li>
+<li>The comparision to keyj minimp3 is rather misleading (its init 
+function seems to take approx. 16M cycles, which are counted as extra 8M
+ clks/s in case of small 2s files).</li>
+<li>The benchmarks are from a newer PC, it would be interesting how it 
+performs on older PCs, including such without SIMD/SSE extensions, or 
+without any FPU at all.</li>
+<li>The whole source code for this decoder is hidden away in a large .h 
+file. Executable versions do not exist, perhaps also due to virus 
+scanners.</li>
+</ul>
+<p></p><hr><!---------------------->
+<font size="+2">other asm decoders</font><br>
+mp3 asm decoders are somewhat hard to find, if they do exist at all.
+Some source code libraries seem to contain asm code, but that's buried in a
+huge library, and it's often only supporting exotic things like simd/sse/neon,
+and only using small asm snippets for the imdct/dct core functions, with other
+functions coded in high level language.
+<br>
+There's reportedly something called "100% assembly coded mpeg-2/mp3 decoder",
+but there's little info if it's been released as source code or binary,
+and for which processor and which operating system.
+<p></p><hr><!---------------------->
+<font size="+2">compression ratios</font><br>
+Historically, mp3 did reach compression ratios of about 1:10
+(compared to uncompressed CD audio).
+But, whilst small is good for compression,
+many users and distributors think that bigger is better.
+These days, the typical mp3 ratio is about 1:5,
+which is barely better (or even worse) than ADPCM.
+Additionally, mp3 can be vandalized with ID3 headers (which do sometimes
+contain up to 2 Mbytes of lossless hi-res bitmaps in .png format).
+<br>
+<table><tbody><tr bgcolor="#eeeeee"><td><pre>  WAV   44,100Hz, stereo, 16bit      1,411,200 bit/s (1:1)
+  FLAC  44,100Hz, stereo, 16bit       ~705,600 bit/s (1:2)
+  ADPCM 44,100Hz, stereo, 4bit         352,800 bit/s (1:4)
+  ADPCM 44,100Hz, mono, 4bit           176,400 bit/s (1:8)
+  ADPCM 22,050Hz, mono, 4bit            88,200 bit/s (1:16)
+  MP3   variable rate, high quality   ~240,000 bit/s (1:5.88)
+  MP3   320kbit/s (highest)            320,000 bit/s (1:4.41)
+  MP3   256kbit/s (common these days)  256,000 bit/s (1:5.51)
+  MP3   192kbit/s (common earlier)     192,000 bit/s (1:7.53)
+  MP3   128kbit/s (medium)             128,000 bit/s (1:11.02)
+  MP3   32kbit/s  (lowest for mpeg1)    32,000 bit/s (1:44.10)
+  MP3   8kbit/s   (lowest for mpeg2)     8,000 bit/s (1:176.40)
+  OGG   compresses better than mp3
+  AAC   compresses yet better than mp3
+</pre></td></tr></tbody></table><br>
+
+web site: <a href="https://problemkaputt.de/mp3.htm">https://problemkaputt.de/mp3.htm</a>
+
+</body></html>
