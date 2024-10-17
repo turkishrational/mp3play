@@ -1,4 +1,4 @@
-### MP3 PLAYER (for Windows concole & TRDOS386) & ASM Source Code (FASM) ###
+### MP3 PLAYER (for Windows console & TRDOS386) & ASM Source Code (FASM) ###
 
 This repository contains MP3PLAYER/MP3DECODER source code and samples and variants which are written in ASSEMBLY Language (syntax of FASM, NASM and TASM).
 
