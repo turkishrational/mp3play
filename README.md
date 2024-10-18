@@ -11,9 +11,9 @@ So, if I could find an ASM example -of MP3 decoder/player-, I would change/modif
 About 1 week ago, I saw Martin Korth's program on his web site (https://problemkaputt.de/mp3.htm).
 
 NOCASH (nickname) MP3 decode/player file: MP3PLAY.EXE v1.4 (a windows console application)
-I tried it on a Windows 7 desktop (I use this desktop computer for program development). And i have confirmed it is succesful, plays my mp3 files correctly.
+I tried it on a Windows 7 desktop (I use this desktop computer for program development). And I have confirmed it is succesful, plays my mp3 files correctly.
 
-(Specially i have tested it with 'yillar.mp3' file. 'Yillar Sonra' Anatolian Rock/Pop song by Kirac in Turkish. Timing/Speed and sound quality is good/normal when it is played by MP3PLAY.EXE. The CPU is AMD Athlon Dual Core, 2.2 GHz.)
+(Specially I have tested it with 'yillar.mp3' file. 'Yillar Sonra' Anatolian Rock/Pop song by Kirac in Turkish. Timing/Speed and sound quality is good/normal when it is played by MP3PLAY.EXE. The CPU is AMD Athlon Dual Core, 2.2 GHz.)
 
 Martin Korth's MP3 player/decoder uses fixed point arithmetics (by using 32 bit fractions) instead of FPU instructions.
 He and others say fixed point arithmetic based MP3 player is more proper for old (hardware) computers. Like as computers which have Pentium series and 486 CPUs.
