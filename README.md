@@ -11,7 +11,7 @@ So, if I could find an ASM example -of MP3 decoder/player-, I would change/modif
 About 1 week ago, I saw Martin Korth's program on his web site (https://problemkaputt.de/mp3.htm).
 
 NOCASH (nickname) MP3 decoder/player file: MP3PLAY.EXE v1.4 (a windows console application).
-I tried it on a Windows 7 desktop (I use this desktop computer for program development). And I have confirmed it is succesful, plays my mp3 files correctly.
+I tried it on a Windows 7 desktop (I am using this desktop computer for program development). And I have confirmed it is succesful, plays my mp3 files correctly.
 
 (Specially I have tested it with 'yillar.mp3' file. 'Yillar Sonra' Anatolian Rock/Pop song by Kirac in Turkish. Timing/Speed and sound quality is good/normal when it is played by MP3PLAY.EXE. The CPU is AMD Athlon Dual Core, 2.2 GHz.)
 
