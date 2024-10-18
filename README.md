@@ -8,7 +8,7 @@ I was searching MP3 player source code which is/are written in Assembly language
 
 So, if I could find an ASM example -of MP3 decoder/player-, I would change/modify it's syntax to FASM -has TRDOS 386 adaptation- and NASM with OS specific function modifications. Till October 2024, I could not find an example.)
 
-About 1 week ago, I saw Martin Korth's program on his web site (https:problemkaputt.de/mp3.htm).
+About 1 week ago, I saw Martin Korth's program on his web site (https://problemkaputt.de/mp3.htm).
 
 NOCASH (nickname) MP3 decode/player file: MP3PLAY.EXE v1.4 (a windows console application)
 I tried it on a Windows 7 desktop (I use this desktop computer for program development). And i have confirmed it is succesful, plays my mp3 files correctly.
