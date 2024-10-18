@@ -2,7 +2,7 @@
 
 This repository contains MP3PLAYER/MP3DECODER source code and samples and variants which are written in ASSEMBLY Language (syntax of FASM, NASM and TASM).
 
-I was searching MP3 player source code which is/are written in Assembly language, to port/adapt it/them to TRDOS 386 operatings system.
+I was searching MP3 player source code which is/are written in Assembly language, to port/adapt it/them to TRDOS 386 operating system.
 
 (I could not used any mp3 decoder/player source code which is written in C/C++ because -currently- it is not possible to compile it/them for TRDOS 386 operating system.
 
