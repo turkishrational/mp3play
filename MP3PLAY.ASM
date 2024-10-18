@@ -9,7 +9,7 @@
 ; ****************************************************************************
 ; Modified from Martin Korth's 'mp3play.asm' (TASM32) source code... (v1.4)
 ; Applied development method:
-;         Disassembling 'mp3play.exe' v1.4 by using HEXRAY disassembler;
+;         Disassembling 'mp3play.exe' v1.4 by using HEX-RAYS disassembler;
 ;         then... converting disassembled code to FASM syntax,
 ;                 adding '.idata' code (by help of FASM examples) to the raw
 ;                        asm file. Converting 'proc' procedures to labels.
@@ -10425,7 +10425,7 @@ warn_errmsg_8   db 'waveOutClose',0
 
 ; Erdogan Tan - 17/10/2024
                ;db 'NOCASH MP3 PLAYER v1.4 for Windows ',0
-txt_ctrlc       db '(press CTCRL+C to quit)', 13,10',0
+txt_ctrlc       db '(press CTRL+C to quit)', 13,10',0
 txt_about       db 13,10
                 db '----------------------------------',13,10
                 db 'Erdogan Tan - 17/10/2024 (Assembler: FASM)', 13,10
