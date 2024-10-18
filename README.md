@@ -33,8 +33,9 @@ But this source code (view) modifications/fixes would not affect EXE file. (Exce
 Perhaps I can modify and optimize source code in near future for increasing speed and decerasing file size. This will be depended on TRDOS 386 adaptatition of the nocash MP3 player.)
 
 NOTE: TRDOS 386 adaptation/port of this MP3 player is not ready yet.
-(In  near future, I also think to develop a compressed audio file format for 16 bit DOS and 32 bit TRDOS. Instead of MP3.
+
+(In near future, I also think to develop a compressed audio file format for 16 bit DOS and 32 bit TRDOS. Instead of MP3.
 I think to use/develop 'wave peak points' based frame compression. Decompressed frame will be about 32KB. This buffer size is proper for 16 bit DOS .COM files.
- As i have already got big/huge WAV file players (.COM files) for DOS and (.PRG files) TRDOS 386, i think to use same audio buffering and playing logic. So, I see that a new type frame compression -5 to 10 times lossy compression or 3-5 times lossless compression of wav files will be good for me.)
+As I have already got big/huge WAV file players (.COM files) for DOS and (.PRG files) TRDOS 386, I think to use same audio buffering and playing logic. So, I see that a new type frame compression -5 to 10 times lossy compression or 3-5 times lossless compression of wav files will be good for me.)
        
 Erdogan Tan - 18/10/2024
