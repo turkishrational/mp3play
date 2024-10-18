@@ -29,7 +29,7 @@ After a searching phase, by help of FASM examples, I have converted Windows kern
 
 But this source code (view) modifications/fixes would not affect EXE file. (Except any possible bugfixes and optimizations.) 
 
-Perhaps I can modify and optimize source code in near future for increasing speed and decreasing file size. This will be depended on TRDOS 386 adaptatition of the nocash MP3 player.)
+Perhaps I can modify and optimize source code in near future for increasing speed and decreasing file size. This will be depended on TRDOS 386 adaptation of the nocash MP3 player.)
 
 NOTE: TRDOS 386 adaptation/port of this MP3 player is not ready yet.
 
