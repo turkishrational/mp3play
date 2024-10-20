@@ -4,7 +4,7 @@
 ;
 ; FASM Source Code: Erdogan Tan - 17/10/2024 (v1.4.0)
 ;
-; [ Last Modification: 17/10/2024 ]
+; [ Last Modification: 20/10/2024 ]
 ;
 ; ****************************************************************************
 ; Modified from Martin Korth's 'mp3play.asm' (TASM32) source code... (v1.4)
@@ -172,14 +172,14 @@ detect_cpu_386_and_up:
                 popf
                 mov     esp, ebx
                 test    eax, 40000h
-                jz      short @@no_id
+                jz      short .no_id
                 inc     [detected_cpu]
                 call    @@get_id_flag
-                jnz     short @@yep_id
+                jnz     short .yep_id
                 call    @@get_id_flag
-                jz      short @@no_id
+                jz      short .no_id
 
-@@yep_id:
+.yep_id:
                 mov     eax, 1
                 cpuid
                 and     ah, 0Fh
@@ -187,7 +187,7 @@ detect_cpu_386_and_up:
                 mov     [cpuid_exists], 1
                 mov     [cpuid_flags], edx
 
-@@no_id:
+.no_id:
                 retn
 
 ; =============== S U B R O U T I N E =======================================
@@ -268,7 +268,7 @@ bswap_eax:
 
 mp3_recollect_bits:
                 test    esi, 1
-                jnz     short @@odd
+                jnz     short .odd
                 mov     bp, [esi]
                 add     esi, 2
                 ror     bp, 8
@@ -276,7 +276,7 @@ mp3_recollect_bits:
                 mov     ch, 0
                 retn
 
-@@odd:
+.odd:
                 movzx   ebp, byte [esi]
                 inc     esi
                 shl     ebp, 10h
@@ -332,30 +332,30 @@ mp3_search_get_header:
 .no_rdtsc_supported:
                 mov     [mp3_extra_bytes], 0
 
-@@retry_header:
+.retry_header:
                 cmp     [mp3_src_remain], 4
-                jb      @@fail_no_header
+                jb      .fail_no_header
                 cmp     byte [esi], 0FFh
-                jnz     short @@bad_header
+                jnz     short .bad_header
                 mov     al, [esi+1]
                 and     al, 0E6h
                 cmp     al, 0E2h
-                jnz     short @@bad_header
+                jnz     short .bad_header
                 mov     al, [esi+2]
                 cmp     al, 0F0h
-                jnb     short @@bad_header
+                jnb     short .bad_header
                 and     al, 0Ch
                 cmp     al, 0Ch
-                jnz     short @@good_header
+                jnz     short .good_header
 
-@@bad_header:
+.bad_header:
                 inc     esi
                 dec     [mp3_src_remain]
                 inc     [mp3_extra_bytes]
                 mov     [main_data_pool_wr_ptr], main_data_pool_start
-                jmp     short @@retry_header
+                jmp     short .retry_header
 
-@@good_header:
+.good_header:
                 mov     eax, [esi]
                 call    bswap_eax
                 mov     [mp3_hdr_32bit_header], eax
@@ -363,14 +363,14 @@ mp3_search_get_header:
                 mov     [mp3_hdr_flag_mpeg25], 0
                 mov     [mp3_nb_granules], 2
                 test    eax, 80000h
-                jnz     short @@lsf_this
+                jnz     short .lsf_this
                 mov     [mp3_hdr_flag_lsf], 1
                 mov     [mp3_nb_granules], 1
                 test    eax, 100000h
-                jnz     short @@lsf_this
+                jnz     short .lsf_this
                 mov     [mp3_hdr_flag_mpeg25], 1
 
-@@lsf_this:
+.lsf_this:
                 shr     eax, 10
                 and     eax, 3
                 mov     ecx, [mp3_hdr_flag_lsf]
@@ -396,13 +396,13 @@ mp3_search_get_header:
                 mov     eax, [mp3_hdr_32bit_header]
                 shr     eax, 12
                 and     eax, 0Fh
-                jnz     short @@not_free_format
+                jnz     short .not_free_format
                 call    mp3_detect_free_format_block_size
-                jb      @@bad_header
+                jb      .bad_header
                 mov     eax, [mp3_free_format_frame_size]
-                jmp     short @@this_frame_size_plus_padding
+                jmp     short .this_frame_size_plus_padding
 
-@@not_free_format:
+.not_free_format:
                 mov     edx, [mp3_hdr_flag_lsf]
                 shl     edx, 4
                 add     eax, edx
@@ -415,7 +415,7 @@ mp3_search_get_header:
                 mov     ecx, [mp3_hdr_flag_lsf]
                 shr     eax, cl
 
-@@this_frame_size_plus_padding:
+.this_frame_size_plus_padding:
                 add     eax, [mp3_hdr_flag_padding]
                 mov     [mp3_src_frame_size], eax
                 add     eax, esi
@@ -426,16 +426,16 @@ mp3_search_get_header:
                 mov     [mp3_hdr_mode_val], eax
                 cmp     al, 3
                 mov     edx, 1
-                jz      short @@this_channels
+                jz      short .this_channels
                 mov     edx, 2
 
-@@this_channels:
+.this_channels:
                 mov     [mp3_src_num_channels], edx
                 cmp     [option_mono], 0
-                jz      short @@allow_stereo
+                jz      short .allow_stereo
                 mov     edx, 1
 
-@@allow_stereo:
+.allow_stereo:
                 mov     [mp3_output_num_channels], edx
                 imul    edx, [mp3_bytes_per_sample]
                 mov     [mp3_samples_dst_step], edx
@@ -453,7 +453,7 @@ mp3_search_get_header:
                 clc
                 retn
 
-@@fail_no_header:
+.fail_no_header:
                 test    byte [cpuid_flags], 10h
                 jz      short .no_rdtsc_supported@@
                 rdtsc
@@ -478,13 +478,13 @@ mp3_bitstream_read_header_extra:
 
 .no_rdtsc_supported:
                 cmp     [mp3_hdr_flag_crc], 0
-                jz      short @@without_crc
+                jz      short .without_crc
                 mov     eax, ebp        ; mp3mac_get_n_bits 16
                 shl     ebp, 10h
                 rol     eax, 10h
                 xor     eax, ebp
                 sub     ch, 10h
-                jns     short @@without_crc
+                jns     short .without_crc
                 mov     cl, ch          ; mp3mac_collect_more
                 add     ch, 10h
                 rol     ebp, cl
@@ -493,16 +493,16 @@ mp3_bitstream_read_header_extra:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@without_crc:
+.without_crc:
                 cmp     [mp3_hdr_flag_lsf], 0
-                jz      short @@pre_lsf_zero
+                jz      short .pre_lsf_zero
                 mov     [mp3_num_compress_bits], 9
                 mov     eax, ebp        ; mp3mac_get_n_bits 8
                 shl     ebp, 8
                 rol     eax, 8
                 xor     eax, ebp
                 sub     ch, 8
-                jns     short @@without_crc@
+                jns     short .without_crc@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -511,7 +511,7 @@ mp3_bitstream_read_header_extra:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@without_crc@:
+.without_crc@:
                 mov     [mp3_main_data_begin], eax
                 mov     cl, byte [mp3_src_num_channels]
                 mov     eax, ebp        ; mp3mac_get_n_bits cl
@@ -519,7 +519,7 @@ mp3_bitstream_read_header_extra:
                 rol     eax, cl
                 xor     eax, ebp
                 sub     ch, cl
-                jns     short @@without_crc@@
+                jns     short .without_crc@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -528,17 +528,17 @@ mp3_bitstream_read_header_extra:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@without_crc@@:
-                jmp     @@pre_lsf_done
+.without_crc@@:
+                jmp     .pre_lsf_done
 
-@@pre_lsf_zero:
+.pre_lsf_zero:
                 mov     [mp3_num_compress_bits], 4
                 mov     eax, ebp        ; mp3mac_get_n_bits 9
                 shl     ebp, 9
                 rol     eax, 9
                 xor     eax, ebp
                 sub     ch, 9
-                jns     short @@@without_crc
+                jns     short .without_crc@@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -547,7 +547,7 @@ mp3_bitstream_read_header_extra:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@@without_crc:
+.without_crc@@@:
                 mov     [mp3_main_data_begin], eax
                 mov     cl, byte [mp3_src_num_channels]
                 shl     cl, 1           ; 1,2 --> 2,4
@@ -557,7 +557,7 @@ mp3_bitstream_read_header_extra:
                 rol     eax, cl
                 xor     eax, ebp
                 sub     ch, cl
-                jns     short @@@without_crc@
+                jns     short .without_crc@@@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -566,11 +566,11 @@ mp3_bitstream_read_header_extra:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@@without_crc@:
+.without_crc@@@@:
                 mov     edx, [mp3_src_num_channels]
                 mov     ebx, mp3_granules
 
-@@pre_channel_lop:
+.pre_channel_lop:
                 mov     dword [ebx+40], 0 ; [ebx+$mp3gr_scfsi]
                 add     ebx, 2464       ; $mp3gr_entrysiz
                 mov     eax, ebp        ; mp3mac_get_n_bits 4
@@ -578,7 +578,7 @@ mp3_bitstream_read_header_extra:
                 rol     eax, 4
                 xor     eax, ebp
                 sub     ch, 4
-                jns     short @@@without_crc@@
+                jns     short .without_crc@@@@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -587,13 +587,13 @@ mp3_bitstream_read_header_extra:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@@without_crc@@:
+.without_crc@@@@@:
                 mov     [ebx+28h], eax  ; [ebx+$mp3gr_scfsi]
                 add     ebx, 2464       ; $mp3gr_entrysiz
                 dec     edx
-                jnz     short @@pre_channel_lop
+                jnz     short .pre_channel_lop
 
-@@pre_lsf_done:
+.pre_lsf_done:
                 mov     eax, [mp3_nb_granules]
                 imul    eax, 12h
                 mov     [mp3_nb_frames], eax
@@ -630,11 +630,11 @@ mp3_bitstream_read_granules:
                 mov     [mp3_curr_granule], 0
                 mov     ebx, mp3_granules
 
-@@hdr_granule_lop:
+.hdr_granule_lop:
                 push    ebx
                 mov     [mp3_curr_channel], 0
 
-@@hdr_channel_lop:
+.hdr_channel_lop:
                 mov     eax, ebp        ; mp3mac_get_n_bits 12
                 shl     ebp, 12
                 rol     eax, 12
@@ -689,12 +689,12 @@ mp3_bitstream_read_granules:
 .without_crc@@:
                 add     eax, 190        ; 400-210
                 cmp     [mp3_hdr_mode_val], 1
-                jnz     short @@not_ms_stereo
+                jnz     short .not_ms_stereo
                 test    [mp3_hdr_mode_ext], 2
-                jz      short @@not_ms_stereo
+                jz      short .not_ms_stereo
                 sub     eax, 2
 
-@@not_ms_stereo:
+.not_ms_stereo:
                 mov     [ebx+16], eax   ; [ebx+$mp3gr_global_gain]
                 mov     cl, byte [mp3_num_compress_bits]
                 mov     eax, ebp        ; mp3mac_get_n_bits cl
@@ -716,7 +716,7 @@ mp3_bitstream_read_granules:
                 dec     ch              ; mp3mac_get_bit_to_cy
                                         ; dec mp3_colNN
                 shl     ebp, 1          ; shl mp3_col32,1 ; cy=data
-                jnb     _no_blocksplit
+                jnb     .no_blocksplit
                 mov     eax, ebp        ; mp3mac_get_n_bits 2
                 shl     ebp, 2
                 rol     eax, 2
@@ -733,19 +733,19 @@ mp3_bitstream_read_granules:
 
 .without_crc@@@@:
                 cmp     eax, 0
-                jz      _error
+                jz      .error
                 mov     [ebx+44], eax   ; [ebx+$mp3gr_block_type]
                 cmp     eax, 2
                 mov     eax, 18         ; 36/2 ; region_size (default)
-                jz      short @@this_region_size
+                jz      short .this_region_size
                 cmp     [mp3_hdr_sample_rate_index], 2
-                jbe     short @@this_region_size
+                jbe     short .this_region_size
                 mov     eax, 27         ; 54/2 ; region_size
                 cmp     [mp3_hdr_sample_rate_index], 8
-                jnz     short @@this_region_size
+                jnz     short .this_region_size
                 mov     eax, 54         ; 108/2 ; region_size (for rate=8)
 
-@@this_region_size:
+.this_region_size:
                 mov     [ebx+80], eax   ; [ebx+$mp3gr_region_size+0*4]
                 mov     dword [ebx+84], 288 ; [ebx+$mp3gr_region_size+1*4],576/2
                 mov     dword [ebx+88], 288 ; [ebx+$mp3gr_region_size+2*4],576/2
@@ -819,7 +819,7 @@ mp3_bitstream_read_granules:
                 rol     eax, 3
                 xor     eax, ebp
                 sub     ch, 3
-                jns     short .without_crc_@
+                jns     short .without_crc_@@@@@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -828,7 +828,7 @@ mp3_bitstream_read_granules:
                 ror     bp, 8
                 ror     ebp, cl
 
-.without_crc_@:
+.without_crc_@@@@@@:
                 shl     eax, 3
                 mov     [ebx+72], eax   ; [ebx+$mp3gr_subblock_gain+nn*4] ; nn=1
                 mov     eax, ebp
@@ -836,7 +836,7 @@ mp3_bitstream_read_granules:
                 rol     eax, 3
                 xor     eax, ebp
                 sub     ch, 3
-                jns     short .without_crc_@@
+                jns     short .without_crc_@@@@@@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -845,12 +845,12 @@ mp3_bitstream_read_granules:
                 ror     bp, 8
                 ror     ebp, cl
 
-.without_crc_@@:
+.without_crc_@@@@@@@:
                 shl     eax, 3
                 mov     [ebx+76], eax   ; [ebx+$mp3gr_subblock_gain+nn*4] ; nn=2
-                jmp     @@blocksplit_done
+                jmp     .blocksplit_done
 
-_no_blocksplit:                       
+.no_blocksplit:                       
                 mov     dword [ebx+44], 0 ; [ebx+$mp3gr_block_type]
                 mov     dword [ebx+48], 0 ; [ebx+$mp3gr_switch_point]
                 mov     eax, ebp        ; IRP nn,0,1,2 ; range 0..2 when non-blocksplit
@@ -858,7 +858,7 @@ _no_blocksplit:
                 rol     eax, 5
                 xor     eax, ebp
                 sub     ch, 5
-                jns     short @@_without_crc
+                jns     short .@_without_crc
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -867,14 +867,14 @@ _no_blocksplit:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@_without_crc:
+.@_without_crc:
                 mov     [ebx+56], eax   ; [ebx+$mp3gr_table_select+nn*4] ; nn=0
                 mov     eax, ebp
                 shl     ebp, 5
                 rol     eax, 5
                 xor     eax, ebp
                 sub     ch, 5
-                jns     short @@_without_crc_@
+                jns     short .@_without_crc_@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -883,14 +883,14 @@ _no_blocksplit:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@_without_crc_@:
+.@_without_crc_@:
                 mov     [ebx+60], eax   ; [ebx+$mp3gr_table_select+nn*4] ; nn=1
                 mov     eax, ebp
                 shl     ebp, 5
                 rol     eax, 5
                 xor     eax, ebp
                 sub     ch, 5
-                jns     short @@_without_crc_@@
+                jns     short .@_without_crc_@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -899,14 +899,14 @@ _no_blocksplit:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@_without_crc_@@:
+.@_without_crc_@@:
                 mov     [ebx+64], eax   ; [ebx+$mp3gr_table_select+nn*4] ; nn=2
                 mov     eax, ebp
                 shl     ebp, 4
                 rol     eax, 4
                 xor     eax, ebp
                 sub     ch, 4
-                jns     short @@_without_crc@
+                jns     short .@_without_crc@@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -915,7 +915,7 @@ _no_blocksplit:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@_without_crc@:
+.@_without_crc@@@:
                 inc     eax
                 mov     [_@@region_address0], eax
                 mov     eax, ebp        ; mp3mac_get_n_bits 3
@@ -923,7 +923,7 @@ _no_blocksplit:
                 rol     eax, 3
                 xor     eax, ebp
                 sub     ch, 3
-                jns     short @@_without_crc@@
+                jns     short .@_without_crc@@@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -932,7 +932,7 @@ _no_blocksplit:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@_without_crc@@:
+.@_without_crc@@@@:
                 inc     eax
                 add     eax, [_@@region_address0]
                 mov     [_@@region_address1], eax
@@ -950,43 +950,43 @@ _no_blocksplit:
                 mov     [ebx+84], eax   ; [ebx+$mp3gr_region_size+1*4]
                 mov     dword [ebx+88], 288 ; [ebx+$mp3gr_region_size+2*4],576/2
 
-@@blocksplit_done:
+.blocksplit_done:
                 lea     edi, [ebx+80]   ; [ebx+$mp3gr_region_size+0]
                 xor     edx, edx
                 mov     cl, 3
 
-@@trunc_region_size_lop:
+.trunc_region_size_lop:
                 mov     eax, [edi]
                 cmp     eax, [ebx+12]   ; [ebx+$mp3gr_big_values]
-                jbe     short @@trunc_region_size_this
+                jbe     short .trunc_region_size_this
                 mov     eax, [ebx+12]
 
-@@trunc_region_size_this:
+.trunc_region_size_this:
                 sub     eax, edx
                 mov     [edi], eax
                 add     edx, eax
                 add     edi, 4
                 dec     cl
-                jnz     short @@trunc_region_size_lop
+                jnz     short .trunc_region_size_lop
                 mov     dword [ebx+28], 13 ; [ebx+$mp3gr_short_start]
                 mov     dword [ebx+32], 22 ; [ebx+$mp3gr_long_end]
                 cmp     dword [ebx+44], 2 ; [ebx+$mp3gr_block_type]
-                jnz     short @@these_band_indices
+                jnz     short .these_band_indices
                 mov     dword [ebx+28], 0 ; [ebx+$mp3gr_short_start]
                 mov     dword [ebx+32], 0 ; [ebx+$mp3gr_long_end]
                 cmp     dword [ebx+48], 0 ; [ebx+$mp3gr_switch_point]
-                jz      short @@these_band_indices
+                jz      short .these_band_indices
                 mov     dword [ebx+28], 2 ; [ebx+$mp3gr_short_start]
                 mov     dword [ebx+32], 4 ; [ebx+$mp3gr_long_end]
                 cmp     [mp3_hdr_sample_rate_index], 8
-                jz      short @@these_band_indices
+                jz      short .these_band_indices
                 cmp     [mp3_hdr_sample_rate_index], 2
                 mov     dword [ebx+28], 3 ; [ebx+$mp3gr_short_start]
                 mov     dword [ebx+32], 8 ; [ebx+$mp3gr_long_end]
-                jbe     short @@these_band_indices
+                jbe     short .these_band_indices
                 mov     dword [ebx+32], 6 ; [ebx+$mp3gr_long_end]
 
-@@these_band_indices:
+.these_band_indices:
                 xor     eax, eax
                 cmp     [mp3_hdr_flag_lsf], 0
                 jnz     short .no_preflag
@@ -1011,7 +1011,7 @@ _no_blocksplit:
                 rol     eax, 1
                 xor     eax, ebp
                 sub     ch, 1
-                jns     short @@@_without_crc
+                jns     short .@_without_crc@@@@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -1020,7 +1020,7 @@ _no_blocksplit:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@@_without_crc:
+.@_without_crc@@@@@:
                 inc     eax
                 mov     [ebx+52], eax   ; [ebx+$mp3gr_scalefac_scale]
                 mov     eax, ebp        ; mp3mac_get_n_bits 1
@@ -1028,7 +1028,7 @@ _no_blocksplit:
                 rol     eax, 1
                 xor     eax, ebp
                 sub     ch, 1
-                jns     short @@@_without_crc@
+                jns     short .@_without_crc@@@@@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -1037,20 +1037,20 @@ _no_blocksplit:
                 ror     bp, 8
                 ror     ebp, cl
 
-@@@_without_crc@: 
+.@_without_crc@@@@@@: 
                 add     eax, 10h        ; table 10h..11h (quad_vlc)
                 mov     [ebx+36], eax   ; [ebx+$mp3gr_count1table_select]
                 add     ebx, 4928       ; $mp3gr_entrysiz*2
                 inc     [mp3_curr_channel]
                 mov     eax, [mp3_curr_channel]
                 cmp     eax, [mp3_src_num_channels]
-                jb      @@hdr_channel_lop
+                jb      .hdr_channel_lop
                 pop     ebx
                 add     ebx, 2464       ; $mp3gr_entrysiz
                 inc     [mp3_curr_granule]
                 mov     eax, [mp3_curr_granule]
                 cmp     eax, [mp3_nb_granules]
-                jb      @@hdr_granule_lop
+                jb      .hdr_granule_lop
                 test    byte [cpuid_flags], 10h ; timelog_end rdtsc_read_granule
                 jz      short .no_rdtsc_supported@
                 rdtsc
@@ -1061,7 +1061,7 @@ _no_blocksplit:
                 clc
                 retn
 
-_error:
+.error:
                 test    byte [cpuid_flags], 10h ; timelog_end rdtsc_read_granule
                 jz      short .no_rdtsc_supported@@
                 rdtsc
@@ -1091,7 +1091,7 @@ mp3_bitstream_append_to_main_data_pool:
                 mov     edi, [main_data_pool_wr_ptr]
                 lea     eax, [edi+ecx]
                 cmp     eax, main_data_pool_wr_ptr
-                jbe     short @@pool_inrange
+                jbe     short .pool_inrange
                 push    ecx
                 push    esi
                 lea     esi, [edi-200h]
@@ -1101,7 +1101,7 @@ mp3_bitstream_append_to_main_data_pool:
                 pop     esi
                 pop     ecx
 
-@@pool_inrange:
+.pool_inrange:
                 mov     eax, edi
                 sub     eax, [mp3_main_data_begin]
                 rep movsb
@@ -1158,19 +1158,19 @@ mp3_bitstream_read_scalefacs:
 .no_rdtsc_supported:
                 lea     edi, [ebx+112]  ; [ebx+$mp3gr_scale_factors]
                 cmp     [mp3_hdr_flag_lsf], 0
-                jnz     @@body_lsf_nonzero
+                jnz     .body_lsf_nonzero
                 mov     eax, [ebx+20]   ; [ebx+$mp3gr_scalefac_compress]
                 mov     dx, [mp3_slen_table+eax*2] ; slen[0,1]
                 cmp     dword [ebx+44], 2 ; [ebx+$mp3gr_block_type]
-                jnz     short @@body_lsf_zero_non_type2
+                jnz     short .body_lsf_zero_non_type2
                 push    ebx
                 mov     al, 18
                 sub     al, [ebx+48]    ; [ebx+$mp3gr_switch_point]
                 mov     bl, al          ; @@get_bl_scalefacs_with_dl_bits 0
                 cmp     dl, 0
-                jz      short @@quickfill
+                jz      short .quickfill
 
-@@scalefac_get_lop:
+.scalefac_get_lop:
                 mov     cl, dl          ; LSB of edx, slen[i]
                 mov     eax, ebp        ; mp3mac_get_n_bits cl
                 shl     ebp, cl
@@ -1189,23 +1189,23 @@ mp3_bitstream_read_scalefacs:
 .cont@:
                 stosb
                 dec     bl
-                jnz     short @@scalefac_get_lop
-                jmp     short @@skip_quickfill
+                jnz     short .scalefac_get_lop
+                jmp     short .skip_quickfill
 
-@@quickfill:
+.quickfill:
                 push    ecx
                 movzx   ecx, bl
                 mov     al, 0           ; NO_INTENSITY_FLAG
                 rep stosb
                 pop     ecx
 
-@@skip_quickfill:
+.skip_quickfill:
                 shr     edx, 8
                 mov     bl, 18
                 cmp     dl, 0           ; @@get_bl_scalefacs_with_dl_bits 0
-                jz      short @@quickfill@
+                jz      short .quickfill@
 
-@@scalefac_get_lop@:
+.scalefac_get_lop@:
                 mov     cl, dl
                 mov     eax, ebp        ; mp3mac_get_n_bits cl
                 shl     ebp, cl
@@ -1224,21 +1224,21 @@ mp3_bitstream_read_scalefacs:
 .cont@@:
                 stosb
                 dec     bl
-                jnz     short @@scalefac_get_lop@
-                jmp     short @@skip_quickfill@
+                jnz     short .scalefac_get_lop@
+                jmp     short .skip_quickfill@
 
-@@quickfill@:
+.quickfill@:
                 push    ecx
                 movzx   ecx, bl
                 mov     al, 0
                 rep stosb
                 pop     ecx
 
-@@skip_quickfill@:
+.skip_quickfill@:
                 pop     ebx
-                jmp     @@body_lsf_zeropad
+                jmp     .body_lsf_zeropad
 
-@@body_lsf_zero_non_type2:
+.body_lsf_zero_non_type2:
                 push    ebx
                 ror     edx, 8
                 mov     dh, dl          ; slen[0,1,2,3] = slen[0,0,1,1]
@@ -1249,13 +1249,13 @@ mp3_bitstream_read_scalefacs:
                 mov     byte [_@@scfsi], al
                 mov     ebx, 5050506h   ; num[0..3]
 
-@@body_lsf_zero_non_type2_lop:
+.body_lsf_zero_non_type2_lop:
                 shl     byte [_@@scfsi], 1
-                jb      short @@body_lsf_zero_non_type2_copy
+                jb      short .body_lsf_zero_non_type2_copy
                 cmp     dl, 0           ; @@get_bl_scalefacs_with_dl_bits 0
-                jz      short @@quickfill@@
+                jz      short .quickfill@@
 
-@@scalefac_get_lop@@:
+.scalefac_get_lop@@:
                 mov     cl, dl
                 mov     eax, ebp
                 shl     ebp, cl
@@ -1274,20 +1274,20 @@ mp3_bitstream_read_scalefacs:
 .cont@@@:
                 stosb
                 dec     bl
-                jnz     short @@scalefac_get_lop@@
-                jmp     short @@skip_quickfill@@
+                jnz     short .scalefac_get_lop@@
+                jmp     short .skip_quickfill@@
 
-@@quickfill@@:
+.quickfill@@:
                 push    ecx
                 movzx   ecx, bl
                 mov     al, 0
                 rep stosb
                 pop     ecx
 
-@@skip_quickfill@@:
-                jmp     short @@body_lsf_zero_non_type2_next
+.skip_quickfill@@:
+                jmp     short .body_lsf_zero_non_type2_next
 
-@@body_lsf_zero_non_type2_copy:
+.body_lsf_zero_non_type2_copy:
                 push    ecx
                 mov     eax, esi
                 movzx   ecx, bl         ; copy
@@ -1296,42 +1296,42 @@ mp3_bitstream_read_scalefacs:
                 mov     esi, eax
                 pop     ecx
 
-@@body_lsf_zero_non_type2_next:
+.body_lsf_zero_non_type2_next:
                 shr     edx, 8          ; dl=next slen
                 shr     ebx, 8          ; bl=next numfacs
-                jnz     short @@body_lsf_zero_non_type2_lop
+                jnz     short .body_lsf_zero_non_type2_lop
                 pop     ebx
                 mov     al, 0
                 stosb
-                jmp     @@body_lsf_done
+                jmp     .body_lsf_done
 
-@@body_lsf_nonzero:
+.body_lsf_nonzero:
                 mov     edx, [ebx+14h]  ; [ebx+$mp3gr_scalefac_compress]
                 test    [mp3_hdr_mode_ext], 1 ; MODE_EXT_I_STEREO
-                jz      short @@normal_scalefac
+                jz      short .normal_scalefac
                 cmp     [mp3_curr_channel], 0
-                jz      short @@normal_scalefac
+                jz      short .normal_scalefac
                 add     edx, 512        ; for 2nd channel of intensity_stereo
 
-@@normal_scalefac:
+.normal_scalefac:
                 mov     al, [(mp3_lsf_sf_expand_exploded_table+5)+edx*8]
                 or      [ebx+24], al    ; [ebx+$mp3gr_preflag]
                 push    ebx
                 movzx   eax, [(mp3_lsf_sf_expand_exploded_table+4)+edx*8]
                 cmp     dword [ebx+44], 2 ;  [ebx+$mp3gr_block_type]
-                jnz     short @@this_tindex1
+                jnz     short .this_tindex1
                 mov     ebx, [ebx+48]   ; [ebx+$mp3gr_switch_point]
                 lea     eax, [eax+ebx*4+4]
 
-@@this_tindex1:
+.this_tindex1:
                 mov     ebx, [mp3_lsf_nsf_table+eax]
                 mov     edx, dword [mp3_lsf_sf_expand_exploded_table+edx*8]
 
-@@scalefax_outer_lop:
+.scalefax_outer_lop:
                 cmp     dl, 0           ; @@get_bl_scalefacs_with_dl_bits 1
-                jz      short @@@quickfil
+                jz      short .@quickfil
 
-@@@scalefac_get_lop:
+.@scalefac_get_lop:
                 mov     cl, dl
                 mov     eax, ebp        ; mp3mac_get_n_bits cl
                 shl     ebp, cl
@@ -1356,23 +1356,23 @@ mp3_bitstream_read_scalefacs:
                 or      al, ah          ; apply NO_INTENSITY_FLAG
                 stosb
                 dec     bl
-                jnz     short @@@scalefac_get_lop
-                jmp     short @@@skip_quickfill
+                jnz     short .@scalefac_get_lop
+                jmp     short .@skip_quickfill
 
-@@@quickfil:
+.@quickfil:
                 push    ecx
                 movzx   ecx, bl
                 mov     al, 80h
                 rep stosb
                 pop     ecx
 
-@@@skip_quickfill:
+.@skip_quickfill:
                 shr     edx, 8
                 shr     ebx, 8
-                jnz     short @@scalefax_outer_lop
+                jnz     short .scalefax_outer_lop
                 pop     ebx
 
-@@body_lsf_zeropad:
+.body_lsf_zeropad:
                 mov     edx, ecx
                 lea     ecx, [ebx+152]  ; [ebx+$mp3gr_scale_factors+40]
                 sub     ecx, edi
@@ -1381,7 +1381,7 @@ mp3_bitstream_read_scalefacs:
                 rep stosb
                 mov     ecx, edx
 
-@@body_lsf_done:
+.body_lsf_done:
                 test    byte [cpuid_flags], 10h ; timelog_end rdtsc_read_scalefac
                 jz      short .no_rdtsc_supported@@@
                 rdtsc
@@ -1414,7 +1414,7 @@ mp3_get_exponents_from_scale_factors:
                 mov     edi, mp3_exponents
                 xor     edx, edx
                 cmp     edx, [ebx+32]   ; [ebx+$mp3gr_long_end]
-                jnb     short @@long_done
+                jnb     short .long_done
                 mov     eax, [mp3_hdr_sample_rate_index]
                 imul    eax, 22
                 lea     ebp, [mp3_band_size_long+eax]
@@ -1422,7 +1422,7 @@ mp3_get_exponents_from_scale_factors:
                 imul    eax, 22
                 lea     esi, [mp3_pretab+eax]
 
-@@long_lop:
+.long_lop:
                 movzx   eax, byte [ebx+edx+112] ; [ebx+$mp3gr_scale_factors+edx]
                 and     al, 7Fh         ; strip NO_INTENSITY_FLAG
                 add     al, [esi+edx]
@@ -1436,12 +1436,12 @@ mp3_get_exponents_from_scale_factors:
                 stosd
                 inc     edx
                 cmp     edx, [ebx+32]   ; [ebx+$mp3gr_long_end]
-                jb      short @@long_lop
+                jb      short .long_lop
 
-@@long_done:
+.long_done:
                 mov     edx, [ebx+28]   ; [ebx+$mp3gr_short_start]
                 cmp     edx, 13
-                jnb     @@skip_shorts
+                jnb     .skip_shorts
                 mov     eax, [mp3_hdr_sample_rate_index]
                 imul    eax, 13
                 lea     ebp, [mp3_band_size_short+eax]
@@ -1457,7 +1457,7 @@ mp3_get_exponents_from_scale_factors:
                 sub     eax, [ebx+76]   ; [ebx+$mp3gr_subblock_gain+nn*4]
                 mov     [_@@gains+8], eax ; [@@gains+nn*4]
 
-@@short_lop:
+.short_lop:
                 movzx   eax, byte [ebx+esi+112] ; [ebx+$mp3gr_scale_factors+esi]
                                         ; IRP nn,0,1,2
                 and     al, 7Fh         ; strip NO_INTENSITY_FLAG
@@ -1494,9 +1494,9 @@ mp3_get_exponents_from_scale_factors:
                 stosd
                 inc     edx
                 cmp     edx, 13
-                jb      short @@short_lop
+                jb      short .short_lop
 
-@@skip_shorts:
+.skip_shorts:
                 pop     esi             ; mp3mac_pop_bitstream
                 pop     ebp
                 pop     ecx
@@ -1531,18 +1531,18 @@ mp3_huffman_decode:
                 mov     [_@rle_point], 0
                 mov     [_@@III], 0  ; i=0
 
-@@low_freq_lop_i:
+.low_freq_lop_i:
                 mov     edx, [_@@III] ; for i=0 to 2
                                         ; low frequencies (called big_values)...
                 mov     eax, [ebx+edx*4+80] ; [ebx+$mp3gr_region_size+edx*4]
                 cmp     eax, 0
-                jz      @@low_freq_next_i
+                jz      .low_freq_next_i
                 mov     [_@@JJJ], eax
                 mov     edx, [ebx+edx*4+56] ; [ebx+$mp3gr_table_select+edx*4]
                                         ; select vlc table
                 movzx   eax, [mp3_huff_data+edx*2] ; get huff.table number
                 cmp     eax, 0          ; huff.table
-                jnz     short @@low_freq_nonzero
+                jnz     short .low_freq_nonzero
                 push    ecx
                 push    edi
                 lea     edi, [ebx+edi*4+160] ; [ebx+$mp3gr_sb_hybrid+edi*4]
@@ -1555,25 +1555,25 @@ mp3_huffman_decode:
                 pop     ecx
                 add     edi, [_@@JJJ] ; raise index accordingly (by num*2)
                 add     edi, [_@@JJJ]
-                jmp     @@low_freq_next_i
+                jmp     .low_freq_next_i
 
-@@low_freq_nonzero:
+.low_freq_nonzero:
                 mov     [_@@vlc_table], eax ; =1..15
                 cmp     eax, 14         ; only table 14..15 have linbits
-                jnb     @@with_linbits  ; so table 0..13 can use faster code...
+                jnb     .with_linbits  ; so table 0..13 can use faster code...
 
-@@low_freq_lop_j_small:
+.low_freq_lop_j_small:
                 cmp     esi, [_@@coarse_end] ; loop @@JJJ times..
-                ja      @@small_near_end
+                ja      .small_near_end
 
-@@small_not_end:
+.small_not_end:
                 cmp     edi, [_@rle_point] ; @@get_runlength small
-                jnb     @@rle_fetch_next_small
+                jnb     .rle_fetch_next_small
 
-@@rle_back_small:
+.rle_back_small:
                 mov     edx, [_@@vlc_table] ; get huffcode
 
-@@get_child_lop:
+.get_child_lop:
                 mov     cl, [(huff_tree_buf+2)+edx*4] ; mp3mac_get_huffcode
                                         ; in: edx=table, out: eax=data
                                         ; bits (table size) (-7..-1)
@@ -1583,11 +1583,11 @@ mp3_huffman_decode:
                 add     edx, eax
                 mov     cl, [(huff_tree_buf+2)+edx*4] ; bits (of entry)
                 cmp     cl, 0
-                js      short @@got_child
+                js      short .got_child
                 movzx   eax, word [huff_tree_buf+edx*4] ; return data value
                 shl     ebp, cl         ; shl mp3_col32,cl ; discard cl bits
                 sub     ch, cl          ; sub mp3_colNN,cl
-                jns     short @@got_done
+                jns     short .got_done
                 mov     cl, ch          ; mp3mac_collect_more
                                         ; mov cl,mp3_colNN ; byte ptr [mp3_numbits_collected]
                 add     ch, 16          ; byte ptr [mp3_numbits_collected]
@@ -1596,14 +1596,14 @@ mp3_huffman_decode:
                 add     esi, 2
                 ror     bp, 8           ; ror mp3_col16,8 ; endianess
                 ror     ebp, cl         ; ror mp3_col32,cl ; dword ptr [mp3_collected_data]
-                jmp     short @@got_done
+                jmp     short .got_done
 
-@@got_child:
+.got_child:
                 shl     ebp, 9          ; shl mp3_col32,CHILD_BITS
                                         ; discard 7 bits
                                         ; (assuming that parents are always 7bit wide)
                 sub     ch, 9
-                jns     short @@get_child_lop
+                jns     short .get_child_lop
                 mov     cl, ch          ; mp3mac_collect_more
                 add     ch, 10h
                 rol     ebp, cl
@@ -1611,28 +1611,28 @@ mp3_huffman_decode:
                 add     esi, 2
                 ror     bp, 8
                 ror     ebp, cl
-                jmp     short @@get_child_lop
+                jmp     short .get_child_lop
 
-@@got_done:
+.got_done:
                 push    eax
                 shr     eax, 4          ; x
-                jz      short @@this_sign ; @@getexpval 0 ; @@getexpval macro has_linbits
+                jz      short .this_sign ; @@getexpval 0 ; @@getexpval macro has_linbits
                                         ; eax=0 (without sign) ; when x=0
                 mov     edx, [_@@rle_val_x_40h]
                 mov     eax, [mp3_expval_table+edx+eax*4]
                 dec     ch              ; mp3mac_get_bit_to_cy
-                                        ; ;jnc  short @@this_sign
+                                        ; ;jnc short @@this_sign
                                         ; ;neg  eax
                 shl     ebp, 1          ; dec mp3_colNN ; shl mp3_col32,1 ; cy=data
                 sbb     edx, edx        ; cy=0,1 --> 0,FFFFFFFF
                 xor     eax, edx        ; invert if cy was 1 ; get sign (negate if sign=1)
                 sub     eax, edx        ; add 1 if cy was 1
 
-@@this_sign:
+.this_sign:
                 mov     [ebx+edi*4+160], eax ; [ebx+$mp3gr_sb_hybrid+edi*4+0]
                 pop     eax
                 and     eax, 0Fh        ; y
-                jz      short @@this_sign@ ; @@getexpval 0
+                jz      short .this_sign@ ; @@getexpval 0
                 mov     edx, [_@@rle_val_x_40h]
                 mov     eax, [mp3_expval_table+edx+eax*4]
                 dec     ch
@@ -1641,40 +1641,40 @@ mp3_huffman_decode:
                 xor     eax, edx
                 sub     eax, edx
 
-@@this_sign@:
+.this_sign@:
                 mov     [ebx+edi*4+164], eax ; [ebx+$mp3gr_sb_hybrid+edi*4+4]
                 add     edi, 2
                 dec     [_@@JJJ]
-                jnz     @@low_freq_lop_j_small
-                jmp     @@low_freq_next_i
+                jnz     .low_freq_lop_j_small
+                jmp     .low_freq_next_i
 
-@@small_near_end:
+.small_near_end:
                 mov     eax, esi        ; mp3mac_bitstream_get_position
                 sub     eax, [mp3_bitstream_start]
                 movsx   edx, ch         ; mp3_colNN
                 neg     edx
                 lea     eax, [edx+eax*8-16]
                 cmp     eax, [ebx+8]    ; [ebx+$mp3gr_part2_3_end]
-                jb      @@small_not_end
-                jmp     @@low_freq_next_i
+                jb      .small_not_end
+                jmp     .low_freq_next_i
 
-@@with_linbits:
+.with_linbits:
                 movzx   eax, [(mp3_huff_data+1)+edx*2]
                 mov     [_@@linbits], eax
 
-@@low_freq_lop_j:
+.low_freq_lop_j:
                 cmp     esi, [_@@coarse_end] ; mp3mac_bitstream_get_position
                                         ; loop @@JJJ times...
-                ja      _lop_j_near_end
+                ja      .lop_j_near_end
 
-@@small_not_end@:
+.small_not_end@:
                 cmp     edi, [_@rle_point] ; @@get_runlength small
-                jnb     @@rle_fetch_next_full
+                jnb     .rle_fetch_next_full
 
-@@rle_back_full:
+.rle_back_full:
                 mov     edx, [_@@vlc_table] ; get huffcode
 
-@@get_child_lop@:
+.get_child_lop@:
                 mov     cl, [(huff_tree_buf+2)+edx*4] ; mp3mac_get_huffcode
                                         ; in: edx=table, out: eax=data
                                         ; bits (table size) (-7..-1)
@@ -1684,11 +1684,11 @@ mp3_huffman_decode:
                 add     edx, eax
                 mov     cl, [(huff_tree_buf+2)+edx*4] ; bits (of entry)
                 cmp     cl, 0
-                js      short @@got_child@
+                js      short .got_child@
                 movzx   eax, word [huff_tree_buf+edx*4] ; return data value
                 shl     ebp, cl         ; discard cl bits
                 sub     ch, cl
-                jns     short @@got_done@
+                jns     short .got_done@
                 mov     cl, ch          ; mp3mac_collect_more
                 add     ch, 10h
                 rol     ebp, cl
@@ -1696,12 +1696,12 @@ mp3_huffman_decode:
                 add     esi, 2
                 ror     bp, 8
                 ror     ebp, cl
-                jmp     short @@got_done@
+                jmp     short .got_done@
 
-@@got_child@:
+.got_child@:
                 shl     ebp, 9
                 sub     ch, 9
-                jns     short @@get_child_lop@
+                jns     short .get_child_lop@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -1709,15 +1709,15 @@ mp3_huffman_decode:
                 add     esi, 2
                 ror     bp, 8
                 ror     ebp, cl
-                jmp     short @@get_child_lop@
+                jmp     short .get_child_lop@
 
-@@got_done@:
+.got_done@:
                 push    eax
                 shr     eax, 4          ; x
-                jz      short @@@this_sign ; @@getexpval 1
+                jz      short .@this_sign ; @@getexpval 1
                 mov     edx, [_@@rle_val]
                 cmp     eax, 15
-                jb      short @@small   ; when x=1..14
+                jb      short .small    ; when x=1..14
                 mov     cl, byte [_@@linbits] ; =0..13 ; when x=15, with linbits
                 mov     eax, ebp        ; mp3mac_get_n_bits cl ; value = 0..1FFFh
                 shl     ebp, cl         ; mp3mac_collect_more
@@ -1744,36 +1744,36 @@ mp3_huffman_decode:
                 sub     cl, dl          ; sub exponent.msb
                 shr     eax, cl
                 cmp     cl, 31
-                jbe     short @@get_sign
+                jbe     short .get_sign
                 xor     eax, eax
-                jmp     short @@get_sign
+                jmp     short .get_sign
 
-@@small:
+.small:
                 shl     edx, 6          ; shl edx,4+2 ; mul16*4 ; when x<15 aka x=1..14
                 mov     eax, [mp3_expval_table+edx+eax*4]
 
-@@get_sign:
+.get_sign:
                 dec     ch              ; mp3mac_get_bit_to_cy
                 shl     ebp, 1
                 sbb     edx, edx        ; get sign (negate if sign=1)
                 xor     eax, edx
                 sub     eax, edx
 
-@@@this_sign:
+.@this_sign:
                 mov     [ebx+edi*4+160], eax ; [ebx+$mp3gr_sb_hybrid+edi*4+0]
                 pop     eax
                 and     eax, 0Fh        ; y
-                jz      short @@@this_sign@ ; @@getexpval 1
+                jz      short .@this_sign@ ; @@getexpval 1
                 mov     edx, [_@@rle_val]
                 cmp     eax, 0Fh
-                jb      short @@small@
+                jb      short .small@
                 mov     cl, byte [_@@linbits]
                 mov     eax, ebp        ; mp3mac_get_n_bits cl
                 shl     ebp, cl
                 rol     eax, cl
                 xor     eax, ebp
                 sub     ch, cl
-                jns     short @cont@
+                jns     short .cont@
                 mov     cl, ch          ; mp3mac_collect_more
                 add     ch, 10h
                 rol     ebp, cl
@@ -1782,7 +1782,7 @@ mp3_huffman_decode:
                 ror     bp, 8
                 ror     ebp, cl
 
-@cont@:
+.cont@:
                 mov     cl, dl
                 and     cl, 3
                 shr     edx, 2
@@ -1793,57 +1793,57 @@ mp3_huffman_decode:
                 sub     cl, dl
                 shr     eax, cl
                 cmp     cl, 31
-                jbe     short @@get_sign@
+                jbe     short .get_sign@
                 xor     eax, eax
-                jmp     short @@get_sign@
+                jmp     short .get_sign@
 
-@@small@:
+.small@:
                 shl     edx, 6
                 mov     eax, [mp3_expval_table+edx+eax*4]
 
-@@get_sign@:                           
+.get_sign@:                           
                 dec     ch              ; dec mp3_colNN
                 shl     ebp, 1          ; shl mp3_col32,1 ; cy=data
                 sbb     edx, edx        ; cy=0,1 --> 0,FFFFFFFF
                 xor     eax, edx        ; invert if cy was 1
                 sub     eax, edx        ; add 1 if cy was 1
 
-@@@this_sign@:
+.@this_sign@:
                 mov     [ebx+edi*4+164], eax ; [ebx+$mp3gr_sb_hybrid+edi*4+4]
                 add     edi, 2          ; next j
                 dec     [_@@JJJ]
-                jnz     @@low_freq_lop_j
+                jnz     .low_freq_lop_j
 
-@@low_freq_next_i:
-                inc     [_@@III]     ; next i
+.low_freq_next_i:
+                inc     [_@@III]        ; next i
                 cmp     [_@@III], 3
-                jb      @@low_freq_lop_i
+                jb      .low_freq_lop_i
                 cmp     edi, 572        ; aka 576-4 ; skip if less than 4 entries left
-                ja      @@high_freq_done
+                ja      .high_freq_done
 
-@@high_freq_lop:
+.high_freq_lop:
                 cmp     esi, [_@@coarse_end]
-                jbe     short @@high_freq_inrange
+                jbe     short .high_freq_inrange
                 mov     eax, esi        ; mp3mac_bitstream_get_position
                 sub     eax, [mp3_bitstream_start]
                 movsx   edx, ch         ; mp3_colNN
                 neg     edx
                 lea     eax, [edx+eax*8-16]
                 cmp     eax, [ebx+8]    ; [ebx+$mp3gr_part2_3_end] ; check end
-                jb      short @@high_freq_inrange ; not yet end
-                jz      @@high_freq_done ; okay, exact end
+                jb      short .high_freq_inrange ; not yet end
+                jz      .high_freq_done ; okay, exact end
                 cmp     edi, 4
-                jb      short @@high_freq_cannot_stepback
+                jb      short .high_freq_cannot_stepback
                 sub     edi, 4          ; stepback, s_index-4 ; dst stepback
 
-@@high_freq_cannot_stepback:
-                jmp     @@high_freq_done
+.high_freq_cannot_stepback:
+                jmp     .high_freq_done
 
-@@high_freq_inrange:
+.high_freq_inrange:
                 mov     edx, [ebx+24h]  ; [ebx+$mp3gr_count1table_select]
                                         ; get huffcode (quad_vlc)
 
-@@get_child_lop@@:
+.get_child_lop@@:
                 mov     cl, [(huff_tree_buf+2)+edx*4] ; mp3mac_get_huffcode
                 mov     dx, word [huff_tree_buf+edx*4]
                 mov     eax, ebp
@@ -1851,11 +1851,11 @@ mp3_huffman_decode:
                 add     edx, eax
                 mov     cl, [(huff_tree_buf+2)+edx*4]
                 cmp     cl, 0
-                js      short @@got_child@@
+                js      short .got_child@@
                 movzx   eax, word [huff_tree_buf+edx*4]
                 shl     ebp, cl
                 sub     ch, cl
-                jns     short @@got_done@@
+                jns     short .got_done@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -1863,12 +1863,12 @@ mp3_huffman_decode:
                 add     esi, 2
                 ror     bp, 8
                 ror     ebp, cl
-                jmp     short @@got_done@@
+                jmp     short .got_done@@
 
-@@got_child@@:
+.got_child@@:
                 shl     ebp, 9
                 sub     ch, 9
-                jns     short @@get_child_lop@@
+                jns     short .get_child_lop@@
                 mov     cl, ch
                 add     ch, 10h
                 rol     ebp, cl
@@ -1876,40 +1876,40 @@ mp3_huffman_decode:
                 add     esi, 2
                 ror     bp, 8
                 ror     ebp, cl
-                jmp     short @@get_child_lop@@
+                jmp     short .get_child_lop@@
 
-@@got_done@@:
+.got_done@@:
                 mov     dl, al          ; flags
                 shl     dl, 4           ; flags, to upper 4bit
                 mov     dh, 4           ; lopcount
 
-@@high_freq_flag_lop:
+.high_freq_flag_lop:
                 xor     eax, eax
                 shl     dl, 1           ; flag
-                jnb     short @@high_freq_flag_this
+                jnb     short .high_freq_flag_this
                 cmp     edi, [_@rle_point] ; @@get_runlength quads
-                jnb     @@rle_fetch_next_quads
+                jnb     .rle_fetch_next_quads
 
-@@rle_back_quads:
+.rle_back_quads:
                 mov     eax, [_@@rle_val]
                 mov     eax, [mp3_exp_table+eax*4] ; xlat and get sign
                 dec     ch              ; mp3mac_get_bit_to_cy
                 shl     ebp, 1
-                jnb     short @@high_freq_flag_this ;
+                jnb     short .high_freq_flag_this ;
                                         ; sbb edx, edx ; cy=0,1 --> 0,FFFFFFFF
                                         ; xor eax, edx ; invert if cy was 1
                                         ; sub eax, edx ; add 1 if cy was 1
                 neg     eax
 
-@@high_freq_flag_this:
+.high_freq_flag_this:
                 mov     [ebx+edi*4+160], eax ; [ebx+$mp3gr_sb_hybrid+edi*4+0]
                 inc     edi
                 dec     dh
-                jnz     short @@high_freq_flag_lop
+                jnz     short .high_freq_flag_lop
                 cmp     edi, 572        ; aka 576-4 ; loop while space for another 4 values
-                jbe     @@high_freq_lop
+                jbe     .high_freq_lop
 
-@@high_freq_done:
+.high_freq_done:
                 mov     [ebx+92], edi   ; [ebx+$mp3gr_num_nonzero_hybrids]
                 push    ecx
                 mov     ecx, 576        ; end
@@ -1930,52 +1930,52 @@ mp3_huffman_decode:
                 clc                     ; out: cy=0=okay
                 retn
 
-@@rle_fetch_next_small:
+.rle_fetch_next_small:
                 mov     eax, [_@@rle_ptr] ; @@next_runlength small
                 add     [_@@rle_ptr], 4
                 mov     eax, [eax]
                 cmp     di, ax
-                jnb     short @@rle_fetch_next_small
+                jnb     short .rle_fetch_next_small
                 mov     word [_@rle_point], ax
                 shr     eax, 16
                 mov     [_@@rle_val], eax
                 shl     eax, 6
                 mov     [_@@rle_val_x_40h], eax
-                jmp     @@rle_back_small
+                jmp     .rle_back_small
 
-@@rle_fetch_next_full:
+.rle_fetch_next_full:
                 mov     eax, [_@@rle_ptr] ; @@next_runlength full
                 add     [_@@rle_ptr], 4
                 mov     eax, [eax]
                 cmp     di, ax
-                jnb     short @@rle_fetch_next_full
+                jnb     short .rle_fetch_next_full
                 mov     word [_@rle_point], ax
                 shr     eax, 16
                 mov     [_@@rle_val], eax
                 shl     eax, 6
                 mov     [_@@rle_val_x_40h], eax
-                jmp     @@rle_back_full
+                jmp     .rle_back_full
 
-@@rle_fetch_next_quads:
+.rle_fetch_next_quads:
                 mov     eax, [_@@rle_ptr] ; msw=val, lsw=point
                 add     [_@@rle_ptr], 4 ; 2+2
                 mov     eax, [eax]
                 cmp     di, ax          ; needed if rle fetching was skipped
-                jnb     short @@rle_fetch_next_quads
+                jnb     short .rle_fetch_next_quads
                 mov     word [_@rle_point], ax
                 shr     eax, 16
                 mov     [_@@rle_val], eax
-                jmp     @@rle_back_quads
+                jmp     .rle_back_quads
 
-_lop_j_near_end:
+.lop_j_near_end:
                 mov     eax, esi
                 sub     eax, [mp3_bitstream_start]
                 movsx   edx, ch
                 neg     edx
                 lea     eax, [edx+eax*8-16]
                 cmp     eax, [ebx+8]
-                jb      @@small_not_end@
-                jmp     @@low_freq_next_i
+                jb      .small_not_end@
+                jmp     .low_freq_next_i
 
 
 ; =============== S U B R O U T I N E =======================================
@@ -2009,11 +2009,11 @@ mp3_compute_ms_stereo:
                 mov     ecx, [ebx+92]   ; [ebx+$mp3gr_num_nonzero_hybrids] ; ch0
                 mov     eax, [ebx+5020] ; [ebx+$mp3gr_num_nonzero_hybrids+($mp3gr_entrysiz*2)] ; ch1
                 cmp     ecx, eax
-                ja      short @@this_len
+                ja      short .this_len
                 mov     ecx, eax
 
-@@this_len:
-                jecxz   short @@ms_stereo_done
+.this_len:
+                jecxz   short .ms_stereo_done
                 mov     [ebx+92], ecx   ; [ebx+$mp3gr_num_nonzero_hybrids] ; ch0
                 mov     [ebx+5020], ecx ; [ebx+$mp3gr_num_nonzero_hybrids+($mp3gr_entrysiz*2)] ; ch1
 
@@ -2034,7 +2034,7 @@ mp3_compute_ms_stereo:
                 dec     ecx
                 jnz     short .ms_stereo_lop
 
-@@ms_stereo_done:
+.ms_stereo_done:
                 test    byte [cpuid_flags], 10h ; timelog_end rdtsc_ms_stereo
                 jz      short .no_rdtsc_supported@
                 rdtsc
@@ -2067,10 +2067,10 @@ mp3_compute_i_stereo:
                                         ; n_sfb = gr->n_long_sfb + gr->n_short_sfb;
                 cmp     byte [_@@n_short_sfb], 0
                 mov     eax, 1
-                jz      short @@without_short
+                jz      short .without_short
                 mov     eax, 3          ; max_blocks = gr->n_short_sfb ? 3 : 1;
 
-@@without_short:
+.without_short:
                 mov     [_@@max_blocks], eax
                 mov     edi, _@@sfb_array
                 mov     eax, [mp3_hdr_sample_rate_index] ; bstab
@@ -2082,46 +2082,46 @@ mp3_compute_i_stereo:
                 imul    eax, 13
                 lea     esi, [mp3_band_size_short+eax] ; merge lieff-style
                 mov     ecx, [_@@n_short_sfb]
-                jecxz   short @@make_sfb_done ; doing that here is a bit slow,
+                jecxz   short .make_sfb_done ; doing that here is a bit slow,
                                         ; it would be better to pre-compute
                                         ; all merged-combinations
                 add     esi, [ebx+28]   ; [ebx+$mp3gr_short_start]
 
-@@make_sfb_lop:
+.make_sfb_lop:
                 lodsb
                 stosb
                 stosb
                 stosb
                 sub     ecx, 3
-                jnz     short @@make_sfb_lop
+                jnz     short .make_sfb_lop
 
-@@make_sfb_done:
+.make_sfb_done:
                 call    _@@find_top_bands ;
                                         ; L3_stereo_top_band(left+576,gr->sfbtab,n_sfb,max_band);
                 cmp     byte [_@@n_long_sfb], 0
-                jz      short @@without_long
+                jz      short .without_long
                 mov     eax, dword [_@@max_bands]
                 cmp     ah, al          ; if (gr->n_long_sfb)
-                jg      short @@not_max1 ; max_band[0] = max_band[1] = max_band[2] = MINIMP3_MAX
+                jg      short .not_max1 ; max_band[0] = max_band[1] = max_band[2] = MINIMP3_MAX
                                         ; (MINIMP3_MAX(max_band[0], max_band[1]), max_band[2]);
                 mov     ah, al
 
-@@not_max1:
+.not_max1:
                 shr     eax, 8
                 cmp     ah, al
-                jg      short @@not_max2
+                jg      short .not_max2
                 mov     ah, al
 
-@@not_max2:
+.not_max2:
                 mov     al, ah
                 shl     eax, 8
                 mov     al, ah
                 mov     dword [_@@max_bands], eax
 
-@@without_long:
+.without_long:
                 xor     ebp, ebp        ; blk
 
-@@adjust_last_prev_lop:
+.adjust_last_prev_lop:
                 mov     edx, [_@@n_sfb]
                 sub     edx, [_@@max_blocks] ; itop = n_sfb - max_blocks + blk
                 add     edx, ebp
@@ -2132,15 +2132,15 @@ mp3_compute_i_stereo:
                                         ; default_pos = HDR_TEST_MPEG1(hdr) ? 3
                 xor     al, 3           ; 0,3 --> 3,0
                 cmp     cl, [ss:_@@max_bands+ebp]
-                jle     short @@use_default_pos ; ist_pos[itop] = max_band[blk] >=
+                jle     short .use_default_pos ; ist_pos[itop] = max_band[blk] >=
                                         ; prev ? default_pos : ist_pos[prev]
                 mov     al, [ebx+ecx+5040] ; [ebx+@@right+$mp3gr_scale_factors+ecx]
 
-@@use_default_pos:
+.use_default_pos:
                 mov     [ebx+edx+5040], al ; [ebx+@@right+$mp3gr_scale_factors+edx]
                 inc     ebp             ; blk
                 cmp     ebp, [_@@max_blocks]
-                jb      short @@adjust_last_prev_lop
+                jb      short .adjust_last_prev_lop
                 call    _@@apply_i_stereo
                 test    byte [cpuid_flags], 10h ; timelog_end rdtsc_i_stereo
                 jz      short .no_rdtsc_supported@@@@
@@ -2160,30 +2160,30 @@ _@@find_top_bands:
                 lea     esi, [ebx+5088] ; [ebx+@@right+$mp3gr_sb_hybrid]
                 xor     edx, edx
 
-@@find_top_lop_iii:                    
+.find_top_lop_iii:                    
                 xor     ecx, ecx        ; for (i = 0; i < nbands; i++)
 
-@@find_top_lop_kkk:                    
+.find_top_lop_kkk:                    
                 mov     eax, [esi+ecx*4] ; for (k = 0; k < sfb[i]; k += 2)
                 or      eax, [esi+ecx*4+4]
-                jnz     short @@found_nonzero
+                jnz     short .found_nonzero
                 add     ecx, 2
                 cmp     cl, [_@@sfb_array+edx]
-                jb      short @@find_top_lop_kkk
-                jmp     short @@find_top_next
+                jb      short .find_top_lop_kkk
+                jmp     short .find_top_next
 
-@@found_nonzero:
+.found_nonzero:
                 mov     eax, edx
                 div     [_@@const_3]
                 movzx   eax, ah         ; remainder (mod 3)
                 mov     [_@@max_bands+eax], dl ; max_bands[0..2]=i
 
-@@find_top_next:
+.find_top_next:
                 movzx   eax, [_@@sfb_array+edx]
                 lea     esi, [esi+eax*4]
                 inc     edx             ; next
                 cmp     edx, [_@@n_sfb]
-                jb      short @@find_top_lop_iii
+                jb      short .find_top_lop_iii
                 retn
 
 ; =============== S U B R O U T I N E =======================================
@@ -2193,7 +2193,7 @@ _@@apply_i_stereo:
                 mov     eax, mp3_is_table_normal
                 mov     ecx, 7
                 cmp     [mp3_hdr_flag_lsf], 0
-                jz      short @@this_lsf
+                jz      short .this_lsf
                 mov     eax, [ebx+4948] ; [ebx+@@right+$mp3gr_scalefac_compress]
                 and     eax, 1          ; bit0
                 test    [mp3_hdr_mode_ext], 2 ; MODE_EXT_MS_STEREO
@@ -2205,29 +2205,29 @@ _@@apply_i_stereo:
                 add     eax, mp3_is_table_lsf
                 mov     ecx, 64         ; max (must be below NO_INTENSITY_FLAG)
 
-@@this_lsf:
+.this_lsf:
                 mov     [_@@max_pos], ecx ; 7 or 64
                 mov     [_@@is_tab], eax ; table
                 lea     esi, [ebx+160]  ; [ebx+$mp3gr_sb_hybrid]
                 xor     ecx, ecx        ; iii ; for (i = 0; sfb[i]; i++)
 
-@@apply_lop_i:
+.apply_lop_i:
                 movzx   ebp, [_@@sfb_array+ecx] ; if ((int)i > max_band[i % 3]
                                         ; && ipos < max_pos)
                 mov     eax, ecx
                 div     [_@@const_3] ; max_band[i % 3]
                 movzx   eax, ah         ; remainder (mod 3)
                 cmp     cl, [_@@max_bands+eax] ; iii,max_bands[0..2];
-                jle     short @@apply_ms_stereo
+                jle     short .apply_ms_stereo
                 movzx   edi, byte [ebx+ecx+5040] ; [ebx+@@right+$mp3gr_scale_factors+ecx]
                                         ; @@right = $mp3gr_entrysiz*2 = 4928
                                         ; $mp3gr_scale_factors = 112
                 cmp     edi, [_@@max_pos] ; check ipos
-                jnb     short @@apply_ms_stereo
+                jnb     short .apply_ms_stereo
                 shl     edi, 3          ; mul 2*4
                 add     edi, [_@@is_tab]
 
-@@apply_pan_lop:
+.apply_pan_lop:
                 mov     eax, [esi]      ; tmp = granule.ch0.sb_hybrid
                 shl     eax, 2
                 imul    dword [edi+4] ; v1
@@ -2239,12 +2239,12 @@ _@@apply_i_stereo:
                 mov     [esi], edx      ; granule.ch0.sb_hybrid = tmp*v0
                 add     esi, 4
                 dec     ebp
-                jnz     short @@apply_pan_lop
-                jmp     short @@apply_next
+                jnz     short .apply_pan_lop
+                jmp     short .apply_next
 
-@@apply_ms_stereo:
+.apply_ms_stereo:
                 test    [mp3_hdr_mode_ext], 2 ; MODE_EXT_MS_STEREO
-                jz      short @@apply_none
+                jz      short .apply_none
 
 .ms_stereo_lop:
                 mov     eax, [esi]      ; tmp0 = granule.ch0.sb_hybrid[i]
@@ -2258,15 +2258,15 @@ _@@apply_i_stereo:
                 add     esi, 4
                 dec     ebp
                 jnz     short .ms_stereo_lop
-                jmp     short @@apply_next
+                jmp     short .apply_next
 
-@@apply_none:
+.apply_none:
                 lea     esi, [esi+ebp*4] ; skip, keep unchanged
 
-@@apply_next:
+.apply_next:
                 inc     ecx             ; iii
                 cmp     ecx, [_@@n_sfb]
-                jb      @@apply_lop_i   ; next
+                jb      .apply_lop_i   ; next
                 retn
 
 ; =============== S U B R O U T I N E =======================================
@@ -5106,13 +5106,13 @@ synth_16bit_shift_0_fast:
                 mov     edi, [mp3_samples_dst]
                 mov     [mp3_curr_channel], 0
 
-@@synth_channel_lop:
+.synth_channel_lop:
                 push    esi
                 push    edi
                 mov     [mp3_curr_syn_dst], edi
                 mov     [mp3_curr_frame], 0
 
-@@synth_frame_lop:
+.synth_frame_lop:
                 push    esi
                 test    byte [cpuid_flags], 10h
                 jz      short .no_rdtsc_supported@
@@ -5164,7 +5164,7 @@ synth_16bit_shift_0_fast:
                 inc     [mp3_curr_frame]
                 mov     eax, [mp3_curr_frame]
                 cmp     eax, [mp3_nb_frames]
-                jb      @@synth_frame_lop
+                jb      .synth_frame_lop
                 pop     edi
                 pop     esi
                 add     edi, [mp3_bytes_per_sample]
@@ -5172,7 +5172,7 @@ synth_16bit_shift_0_fast:
                 inc     [mp3_curr_channel]
                 mov     eax, [mp3_curr_channel]
                 cmp     eax, [mp3_output_num_channels]
-                jb      @@synth_channel_lop
+                jb      .synth_channel_lop
                 test    byte [cpuid_flags], 10h
                 jz      short .no_rdtsc_supported@@@@@
                 rdtsc
@@ -5189,10 +5189,10 @@ synth_16bit_shift_0_fast:
 mp3_synth_filter_this_16bit_shift_0_fast:
                 mov     eax, [mp3_curr_syn_index]
                 test    eax, 1E0h       ; 1FFh-1Fh
-                jz      @@append_copy_to_window
+                jz      .append_copy_to_window
                 nop
 
-@@append_copy_to_window_back:
+.append_copy_to_window_back:
                 mov     ebp, eax
                 and     ebp, 1C0h       ; @win1,1FFh-1Fh-20h
                 and     eax, 420h       ; and eax,20h+(1 shl 10) ; bit5 and channel
@@ -5202,7 +5202,7 @@ mp3_synth_filter_this_16bit_shift_0_fast:
                 and     ebp, 1C0h       ; @win1,1FFh-1Fh-20h
                 mov     ecx, [mp3_curr_syn_dst] ; @@dst,dword ptr [mp3_curr_syn_dst]
 
-@@samples_lop:
+.samples_lop:
                 mov     ebx, 20002000h  ; mov @@sum,(8000h SHL (@@out_shift))+(1 SHL (@@out_shift-1))
                                         ; @@out_shift equ (OUT_SHIFT_fast+(8*force_8bit))
                                         ; out_shift = 14
@@ -5277,31 +5277,31 @@ mp3_synth_filter_this_16bit_shift_0_fast:
                 imul    eax, edx
                 add     ebx, eax
                 cmp     ebx, 40000000h  ; cmp @@sum,10000h SHL (@@out_shift) ; out_shift = 14
-                jnb     short @@sat
+                jnb     short .sat
                 sar     ebx, 14         ; sar @@sum,(@@out_shift)
                 sub     ebx, 8000h      ; sub @@sum,8000h ; make 16bit signed
 
-@@sat_back:
+.sat_back:
                 mov     [ecx], bx       ; mov word ptr [@@dst],@@sum_16bit
                 add     ecx, [mp3_samples_dst_step]
                 inc     esi             ; inc @@syn1
                 dec     edi             ; dec @@syn2
                 inc     ebp             ; inc @@win1
                 test    ebp, 1Fh        ; IF LONG_WINDOW
-                jnz     @@samples_lop   ; test @@win1,1Fh
+                jnz     .samples_lop   ; test @@win1,1Fh
                 retn
 
-@@sat:
+.sat:
                 sar     ebx, 31         ; sar @@sum,31 ; FFFFFFFFh,00000000h
                 xor     ebx, 7FFFh      ; xor @@sum,7fffh ; FFFF8000h,00007FFFh (signed 16bit)
-                jmp     short @@sat_back
+                jmp     short .sat_back
 
-@@append_copy_to_window:
+.append_copy_to_window:
                 lea     esi, [mp3_synth_buf+eax*4] ; IF SYNTH32
                 lea     edi, [esi+2048] ; [esi+512*4]
                 mov     ecx, 18         ; (12h*4)/4
                 rep movsd
-                jmp     @@append_copy_to_window_back
+                jmp     .append_copy_to_window_back
 
 
 ; =============== S U B R O U T I N E =======================================
@@ -5402,7 +5402,7 @@ synth_16bit_shift_1_fast:
 mp3_synth_filter_this_16bit_shift_1_fast:
                 mov     eax, [mp3_curr_syn_index]
                 test    eax, 1E0h       ; 1FFh-1Fh
-                jz      @@append_copy_to_window
+                jz      .append_copy_to_window
                 nop
 
 .append_copy_to_window_back:
@@ -7606,66 +7606,66 @@ mp3_any_init_synth_window:
                 xor     ecx, ecx        ; delta.val
                 mov     [mp3_synth_win+edx*2], ecx
 
-@@synth_lop:
+.synth_lop:
                 movsx   ebx, [mp3_synth_win_src+edx*2]
                 add     ecx, ebx
                 mov     eax, ecx
                 cmp     [option_fast], 0
-                jz      short @@not_fast
+                jz      short .not_fast
                 sar     eax, 5
 
-@@not_fast:
+.not_fast:
                 cmp     [option_fast], 0
-                jnz     short @@not_slow
+                jnz     short .not_slow
                 shl     eax, 14         ; (WFRAC_BITS_slow-WFRAC_BITS_default)
 
-@@not_slow:
+.not_slow:
                 inc     edx             ; index (1..100h)
                 mov     ebx, 200h
                 sub     ebx, edx        ; 1FFh..100h
                 mov     [mp3_synth_win+ebx*4], eax
                 test    edx, 3Fh
-                jz      short @@synth_keep_sign
+                jz      short .synth_keep_sign
                 neg     eax
 
-@@synth_keep_sign:
+.synth_keep_sign:
                 mov     [mp3_synth_win+edx*4], eax
                 cmp     edx, 100h
-                jb      short @@synth_lop
+                jb      short .synth_lop
                 xor     edx, edx
 
-@@synth_neg_lop:
+.synth_neg_lop:
                 test    edx, 30h        ; skip 0..0Fh (only negate 10h..3Fh)
-                jz      short @@synth_neg_next
+                jz      short .synth_neg_next
                 neg     [mp3_synth_win+edx*4]
 
-@@synth_neg_next:
+.synth_neg_next:
                 inc     edx
                 cmp     edx, 200h
-                jb      short @@synth_neg_lop
+                jb      short .synth_neg_lop
                 xor     edx, edx
 
-@@synth_swap_lop:
+.synth_swap_lop:
                 mov     eax, edx
                 and     eax, 3Fh
                 sub     eax, 17         ; swap win [(17..31)] with win[(17..31)+32)
                 cmp     eax, 14         ; 31-17
-                ja      short @@synth_swap_next
+                ja      short .synth_swap_next
                 mov     eax, [mp3_synth_win+edx*4]
                 xchg    eax, [(mp3_synth_win+80h)+edx*4]
                 mov     [mp3_synth_win+edx*4], eax
 
-@@synth_swap_next:
+.synth_swap_next:
                 inc     edx
                 cmp     edx, 200h
-                jb      short @@synth_swap_lop
+                jb      short .synth_swap_lop
                 xor     edx, edx
 
-@@synth_zero_lop:
+.synth_zero_lop:
                 mov     [(mp3_synth_win+40h)+edx*4], 0
                 add     edx, 40h
                 cmp     edx, 200h
-                jb      short @@synth_zero_lop
+                jb      short .synth_zero_lop
                 mov     esi, mp3_synth_win
                 lea     edi, [esi+2048] ; [esi+512*4]
                 mov     ecx, 512        ; append another copy
@@ -7701,20 +7701,20 @@ mp3_any_init_band_indices:
                 mov     edi, mp3_band_index_long
                 mov     ebx, 9
 
-@@band_index_lop_i:
+.band_index_lop_i:
                 xor     eax, eax
                 mov     ecx, 22
 
-@@band_index_lop_j:
+.band_index_lop_j:
                 stosw
                 movzx   edx, byte [esi]
                 add     eax, edx
                 inc     esi
-                loop    @@band_index_lop_j
+                loop    .band_index_lop_j
                 add     ecx, 10
                 rep stosw
                 dec     ebx
-                jnz     short @@band_index_lop_i
+                jnz     short .band_index_lop_i
                 retn
 
 
@@ -7803,16 +7803,16 @@ mp3_any_init_huff_tables:
 mp3_integer_init_is_stereo_lsf:
                 xor     edi, edi
 
-@@lsf_lop:
+.lsf_lop:
                 mov     esi, edi
                 and     esi, 3Fh
                 inc     esi
                 shr     esi, 1
                 test    edi, 40h
-                jz      short @@lsf_no_shift
+                jz      short .lsf_no_shift
                 shl     esi, 1
 
-@@lsf_no_shift:
+.lsf_no_shift:
                 mov     edx, 40000000h  ; aka mul 1.000
                 add     esi, 4
                 test    edi, 80h        ; 2*40h
@@ -7827,15 +7827,15 @@ mp3_integer_init_is_stereo_lsf:
                 mov     eax, [mp3_is_table_lsf_src+esi*4]
                 shr     eax, cl
                 test    edi, 1
-                jnz     short @@lsf_no_swap
+                jnz     short .lsf_no_swap
                 xchg    eax, edx
 
-@@lsf_no_swap:
+.lsf_no_swap:
                 mov     [mp3_is_table_lsf+edi*8], eax
                 mov     [(mp3_is_table_lsf+4)+edi*8], edx
                 inc     edi
                 cmp     edi, 100h
-                jb      short @@lsf_lop
+                jb      short .lsf_lop
                 retn
 
 
@@ -7851,12 +7851,12 @@ mp3_integer_init_mdct_windows:
                 mov     edi, (mp3_mdct_win+240h)
                 mov     ecx, 72         ; 4*36/2 ; that is, 4*36 entry pairs
 
-@@mdct_lop_dupe:                       
+.mdct_lop_dupe:                       
                 movsd                   ; copy normal, [4..7][even] = +[0..3][even
                 lodsd
                 neg     eax             ; copy negated, [4..7][odd] = -[0..3][odd]
                 stosd
-                loop    @@mdct_lop_dupe
+                loop    .mdct_lop_dupe
                 retn
 
 
@@ -7971,11 +7971,11 @@ cbrt96:
                 xor     ebx, ebx        ; result.value
                 mov     cl, 0           ; result.fraction
                 or      eax, edx        ; skip if zero
-                jz      short @@pre_shift_done
+                jz      short .pre_shift_done
 
-@@pre_shift_lop:
+.pre_shift_lop:
                 test    dword [esp+8], 0E0000000h
-                jnz     short @@pre_shift_done
+                jnz     short .pre_shift_done
                 shl     dword [esp], 1
                 rcl     dword [esp+4], 1
                 rcl     dword [esp+8], 1
@@ -7986,9 +7986,9 @@ cbrt96:
                 rcl     dword [esp+4], 1
                 rcl     dword [esp+8], 1
                 inc     cl
-                jmp     short @@pre_shift_lop
+                jmp     short .pre_shift_lop
 
-@@pre_shift_done:
+.pre_shift_done:
                 mov     ch, 20h         ; loopcount
 
 .lop:
@@ -8054,23 +8054,23 @@ mp3_build_huff_table_root:
                 mov     ecx, eax
                 xor     eax, eax
 
-@@prescan_lop:
+.prescan_lop:
                 cmp     al, [ebx]
-                ja      short @@prescan_next
+                ja      short .prescan_next
                 mov     al, [ebx]
 
-@@prescan_next:
+.prescan_next:
                 inc     ebx
-                loop    @@prescan_lop
+                loop    .prescan_lop
                 cmp     al, 9           ; CHILD_BITS
-                jb      short @@prescan_this_limit
+                jb      short .prescan_this_limit
                 mov     al, 9
 
-@@prescan_this_limit:
+.prescan_this_limit:
                 mov     [_@@table_nb_bits], eax
                 popa
 
-@@mp3_build_huff_table_recursive_child:
+mp3_build_huff_table_recursive_child:
                 mov     ecx, [_@@table_nb_bits]
                 mov     eax, 1
                 shl     eax, cl
@@ -8095,27 +8095,27 @@ mp3_build_huff_table_root:
                 mov     edx, [_@@curr_table_index]
                 mov     ecx, [_@@curr_table_size]
 
-@@clear_table_lop:
+.clear_table_lop:
                 mov     word [edi+edx*4], 0FFFFh
                 mov     word [edi+edx*4+2], 0
                 inc     edx
-                loop    @@clear_table_lop
+                loop    .clear_table_lop
                 push    ebx
                 push    esi
                 xor     edx, edx
 
-@@make_table_lop:
+.make_table_lop:
                 movzx   ecx, byte [ebx]
                 movzx   eax, word [esi]
                 sub     ecx, [_@@prefix_numbits]
-                jle     short @@make_table_lop_next
+                jle     short .make_table_lop_next
                 shr     eax, cl
                 cmp     eax, [_@@prefix_pattern]
-                jnz     short @@make_table_lop_next
+                jnz     short .make_table_lop_next
                 mov     edi, huff_tree_buf
                 movzx   eax, word [esi]
                 sub     ecx, [_@@table_nb_bits]
-                ja      short @@create_child_table
+                ja      short .create_child_table
                 neg     ecx
                 shl     eax, cl
                 and     eax, [_@@curr_table_mask]
@@ -8127,46 +8127,46 @@ mp3_build_huff_table_root:
                 movzx   eax, byte [ebx]
                 sub     eax, [_@@prefix_numbits]
 
-@@make_rept_lop:
+.make_rept_lop:
                 cmp     word [edi+2], 0
                 jnz     fatalunexpected
                 mov     [edi], dx
                 mov     [edi+2], ax
                 add     edi, 4
-                loop    @@make_rept_lop
-                jmp     short @@make_table_lop_next
+                loop    .make_rept_lop
+                jmp     short .make_table_lop_next
 
-@@create_child_table:
+.create_child_table:
                 shr     eax, cl
                 and     eax, [_@@curr_table_mask]
                 add     eax, [_@@curr_table_index]
                 neg     ecx
                 cmp     [edi+eax*4+2], cx
-                jl      short @@make_table_lop_next
+                jl      short .make_table_lop_next
                 mov     [edi+eax*4+2], cx
 
-@@make_table_lop_next:
+.make_table_lop_next:
                 add     esi, 2
                 inc     ebx
                 inc     edx
                 cmp     edx, [_@@nb_codes]
-                jb      @@make_table_lop
+                jb      .make_table_lop
                 pop     esi
                 pop     ebx
                 mov     ecx, [_@@curr_table_size]
                 mov     edx, [_@@curr_table_index]
 
-@@make_child_tables_lop:
+.make_child_tables_lop:
                 mov     edi, huff_tree_buf
                 movsx   eax, word [edi+edx*4+2]
                 cmp     eax, 0
-                jns     short @@make_child_tables_lop_next
+                jns     short .make_child_tables_lop_next
                 neg     eax
                 cmp     eax, [_@@table_nb_bits]
-                jbe     short @@make_child_tables_this
+                jbe     short .make_child_tables_this
                 mov     eax, [_@@table_nb_bits]
 
-@@make_child_tables_this:
+.make_child_tables_this:
                 push    ecx
                 push    edx
                 push    [_@@curr_table_index]
@@ -8180,7 +8180,7 @@ mp3_build_huff_table_root:
                 mov     eax, edx
                 sub     eax, [_@@curr_table_index]
                 or      [_@@prefix_pattern], eax
-                call    @@mp3_build_huff_table_recursive_child
+                call    mp3_build_huff_table_recursive_child
                 pop     [_@@prefix_pattern]
                 pop     [_@@prefix_numbits]
                 pop     [_@@table_nb_bits]
@@ -8188,9 +8188,9 @@ mp3_build_huff_table_root:
                 pop     edx
                 pop     ecx
 
-@@make_child_tables_lop_next:
+.make_child_tables_lop_next:
                 inc     edx
-                loop    @@make_child_tables_lop
+                loop    .make_child_tables_lop
                 retn
 
 
@@ -8204,7 +8204,9 @@ mp3_exclude_id3_and_tag:
                 jb      short .no_id3
                 mov     eax, [esi]
                 and     eax, 0FFFFFFh
-                cmp     eax, '3DI'     ; "ID3"
+                ;cmp    eax, '3DI'     ; "ID3"
+                ; 20/10/2024 
+                cmp     eax, 'ID3'     ; FASM & NASM syntax
                 jnz     short .no_id3
                 mov     eax, [esi+6]
                 test    eax, 80808080h
@@ -8215,12 +8217,12 @@ mp3_exclude_id3_and_tag:
                 shl     al, 1
                 shl     ax, 1
                 shr     ax, 2
-                ror     eax, 10h
+                ror     eax, 16
                 xchg    al, ah
                 shl     al, 1
                 shl     ax, 1
                 shr     eax, 2
-                add     eax, 0Ah
+                add     eax, 10
                 cmp     ecx, eax
                 jb      short .no_id3
                 add     esi, eax
@@ -8233,16 +8235,21 @@ mp3_exclude_id3_and_tag:
                 jb      short .no_tag_or_ext
                 mov     eax, [esi+ecx-80h]
                 and     eax, 0FFFFFFh
-                cmp     eax, 'GAT'     ; "TAG"
+                ;cmp    eax, 'GAT'     ; "TAG"
+                ; 20/10/2024
+                cmp     eax, 'TAG'     ; FASM & NASM syntax
                 jz      .got_tag_size_edx
-                cmp     eax, 'TXE'
+                ;cmp    eax, 'TXE'
+                cmp     eax, 'EXT'
                 jz      .got_tag_size_edx
 
 .no_tag_or_ext:
                 mov     edx, 0E3h
                 cmp     ecx, edx
                 jb      short .no_tagplus
-                cmp     dword [esi+ecx-0E3h], '+GAT' ; "TAG+"
+                ;cmp    dword [esi+ecx-0E3h], '+GAT' ; "TAG+"
+                ; 20/10/2024
+                cmp     dword [esi+ecx-0E3h], 'TAG+'
                 jz      .got_tag_size_edx
 
 .no_tagplus:
@@ -8271,10 +8278,13 @@ mp3_exclude_id3_and_tag:
                 jmp     .got_tag_size_edx
 
 .no_3di:
-                cmp     dword [esi+ecx-32], 'TEPA' ; [esi+ecx-32+0]
+                ;cmp    dword [esi+ecx-32], 'TEPA' ; [esi+ecx-32+0]
+                ; 20/10/2024
+                cmp     dword [esi+ecx-32], 'APET'
                                        ; check "APETAGEX"
                 jnz     short .no_ape
-                cmp     dword [esi+ecx-28], 'XEGA' ; [esi+ecx-32+4]
+                ;cmp    dword [esi+ecx-28], 'XEGA' ; [esi+ecx-32+4]
+                cmp     dword [esi+ecx-28], 'AGEX'
                 jnz     short .no_ape
                 mov     edx, [esi+ecx-20] ; [esi+ecx-32+12] ; get size
                 test    dword [esi+ecx-12], 80000000h ; [esi+ecx-32+20],1 shl 31
@@ -8289,13 +8299,17 @@ mp3_exclude_id3_and_tag:
                 cmp     ecx, edx       ; "LYRICSEND" or "LYRICS200"
                                        ; (11+N+9 bytes each)
                 jb      short .no_lyrics
-                cmp     dword [esi+ecx-9], 'IRYL'
+                ;cmp    dword [esi+ecx-9], 'IRYL'
+                ; 20/10/2024
+                cmp     dword [esi+ecx-9], 'LYRI' ; FASM & NASM syntax
                 jnz     short .no_lyrics
                 cmp     byte [esi+ecx-5], 'C'
                 jnz     short .no_lyrics
-                cmp     dword [esi+ecx-4], 'DNES'
+                ;cmp    dword [esi+ecx-4], 'DNES'
+                cmp     dword [esi+ecx-4], 'SEND'
                 jz      short .lyrics3_v1
-                cmp     dword [esi+ecx-4], '002S'
+                ;cmp    dword [esi+ecx-4], '002S'
+                cmp     dword [esi+ecx-4], 'S200'
                 jz      short .lyrics3_v2
                 jnz     short .no_lyrics
 
@@ -8305,11 +8319,15 @@ mp3_exclude_id3_and_tag:
 .lyrics3_v1_size_lop:
                 lea     eax, [esi+ecx]
                 sub     eax, edx
-                cmp     dword [eax], 'IRYL' ; "LYRICSBEGIN"
+                ;cmp    dword [eax], 'IRYL' ; "LYRICSBEGIN"
+                ; 20/10/2024
+                cmp     dword [eax], 'LYRI'
                 jnz     short .lyrics3_v1_size_next
-                cmp     dword [eax+4], 'EBSC'
+                ;cmp    dword [eax+4], 'EBSC'
+                cmp     dword [eax+4], 'CSBE'
                 jnz     short .lyrics3_v1_size_next
-                cmp     dword [eax+7], 'NIGE'
+                ;cmp    dword [eax+7], 'NIGE'
+                cmp     dword [eax+7], 'EGIN'
                 jz      short .got_tag_size_edx
 
 .lyrics3_v1_size_next:
@@ -8318,7 +8336,10 @@ mp3_exclude_id3_and_tag:
                 ja      short .no_lyrics
                 cmp     edx, ecx
                 jbe     short .lyrics3_v1_size_lop
-                jmp     short .no_lyrics
+                ;jmp     short .no_lyrics
+
+.no_lyrics:
+                jmp     short .footer_tag_all_done
 
 .lyrics3_v2:
                 push    ecx
@@ -8337,10 +8358,7 @@ mp3_exclude_id3_and_tag:
                 pop     esi
                 pop     ecx
                 add     edx, 0Fh       ; 6+9
-                jmp     short .got_tag_size_edx
-
-.no_lyrics:
-                jmp     short .footer_tag_all_done
+                ;jmp    short .got_tag_size_edx
 
 .got_tag_size_edx:
                 mov     eax, edx
@@ -8362,56 +8380,56 @@ mp3_exclude_id3_and_tag:
 
 mp3_detect_free_format_block_size:
                 cmp     [mp3_free_format_frame_size], 0
-                jnz     @@already_detected
+                jnz     .already_detected
                 xor     edx, edx
 
-@@find_distance_lop:
+.find_distance_lop:
                 cmp     edx, [mp3_src_remain]
-                jz      short @@match_eof
+                jz      short .match_eof
                 lea     eax, [edx+4]
                 cmp     eax, [mp3_src_remain]
-                ja      short @@find_distance_failed
+                ja      short .find_distance_failed
                 mov     eax, [esi+edx]
                 call    bswap_eax
                 xor     eax, [mp3_hdr_32bit_header]
                 and     eax, 0FFFE0C00h
-                jz      short @@match_eof
+                jz      short .match_eof
 
-@@find_distance_next:
+.find_distance_next:
                 inc     edx
                 cmp     edx, 1000h
-                jbe     short @@find_distance_lop
+                jbe     short .find_distance_lop
 
-@@find_distance_failed:
+.find_distance_failed:
                 stc
                 retn
 
-@@match_eof:
+.match_eof:
                 mov     eax, edx
                 sub     eax, [mp3_hdr_flag_padding]
                 cmp     eax, 4
-                jb      short @@find_distance_next
+                jb      short .find_distance_next
                 mov     [mp3_free_format_frame_size], eax
                 xor     ebx, ebx
 
-@@confirm_distance_lop:
+.confirm_distance_lop:
                 mov     eax, [esi+ebx]
                 call    bswap_eax
                 shr     eax, 10         ; 9+1
                 adc     ebx, [mp3_free_format_frame_size]
                 cmp     ebx, [mp3_src_remain]
-                jz      short @@confirm_distance_match_eof
+                jz      short .confirm_distance_match_eof
                 lea     eax, [ebx+4]
                 cmp     eax, [mp3_src_remain]
-                ja      short @@find_distance_next
+                ja      short .find_distance_next
                 mov     eax, [esi+ebx]
                 call    bswap_eax
                 xor     eax, [mp3_hdr_32bit_header]
                 and     eax, 0FFFE0C00h
-                jnz     short @@find_distance_next
-                jmp     short @@confirm_distance_lop
+                jnz     short .find_distance_next
+                jmp     short .confirm_distance_lop
 
-@@confirm_distance_match_eof:
+.confirm_distance_match_eof:
                 mov     eax, [mp3_free_format_frame_size]
                 shl     eax, 3
                 mul     [mp3_sample_rate]
@@ -8420,7 +8438,7 @@ mp3_detect_free_format_block_size:
                 div     ecx
                 mov     [mp3_bit_rate], eax
 
-@@already_detected:
+.already_detected:
                 clc
                 retn
 
@@ -8434,11 +8452,13 @@ mp3_check_xing_info:
                 mov     [mp3_xing_filesize], 0
                 mov     esi, [mp3_src_data_location]
                 lodsd
-                cmp     eax, 'gniX'
-                jz      short @@xing
+                ;cmp    eax, 'gniX'
+                ; 20/10/2024
+                cmp	eax, 'Xing'     ; FASM & NASM syntax
+                jz      short .xing
                 retn
 
-@@xing:
+.xing:
                 mov     [mp3_xing_id], eax
                 lodsd
                 call    bswap_eax
@@ -8480,11 +8500,11 @@ mp3_check_xing_info:
                 imul    ecx, [mp3_nb_granules]
                 imul    ecx, 576        ; 18*32
                 cmp     edx, ecx
-                jnb     short @@overflow
+                jnb     short .overflow
                 div     ecx
                 mov     [mp3_bit_rate], eax
 
-@@overflow:
+.overflow:
                 retn
 
 
@@ -9019,8 +9039,8 @@ get_commandline:
                 mov     [option_test], 1
                 jmp     .get_items_lop
 
-.not_switch_test:
-                jmp     short .help
+;.not_switch_test:
+                ;jmp     short .help
 
 .done:
                 cmp     [mp3_src_fname], 0
@@ -9037,6 +9057,7 @@ get_commandline:
                 clc
                 retn
 
+.not_switch_test:	; 20/10/2024
 .help:
                 ;;; Erdogan Tan - 17/10/2024
                 mov     edx, txt_about
@@ -9426,7 +9447,7 @@ prepare_wave_headers:
                 rep stosd
                 mov     edi, sample_buffer
 
-@@prepare_lop:
+.prepare_lop:
                 mov     [ebx], edi
                 mov     dword [ebx+4], 4608 ; MP3_MAX_OUTPUT_SIZE
                 push    32              ; sizeof_WAVEHDR
@@ -9452,7 +9473,7 @@ prepare_wave_headers:
                 add     edi, 4608       ; MP3_MAX_OUTPUT_SIZE
                 add     ebx, 32
                 cmp     ebx, end_of_wave_headers ; mp3_wave_headers+BUFFER_COUNT*20h
-                jb      short @@prepare_lop
+                jb      short .prepare_lop
                 retn
 
 
@@ -9462,7 +9483,7 @@ prepare_wave_headers:
 unprepare_wave_headers:
                 mov     ebx, mp3_wave_headers
 
-@@unprepare_lop:
+.unprepare_lop:
                 push    20h             ; cbwh
                 push    ebx             ; pwh
                 push    [mp3_waveout_handle] ; hwo
@@ -9485,7 +9506,7 @@ unprepare_wave_headers:
 .no_error:
                 add     ebx, 20h
                 cmp     ebx, end_of_wave_headers
-                jb      short @@unprepare_lop
+                jb      short .unprepare_lop
                 retn
 
 
@@ -9580,11 +9601,11 @@ try_enqueue_esi_ebx:
 try_enqueue_esi_all_blocks:
                 mov     ebx, mp3_wave_headers
 
-@@enqueue_initial_lop:                 
+.enqueue_initial_lop:                 
                 call    try_enqueue_esi_ebx
                 add     ebx, 20h
                 cmp     ebx, end_of_wave_headers ; mp3_wave_headers+BUFFER_COUNT*20h
-                jb      short @@enqueue_initial_lop
+                jb      short .enqueue_initial_lop
                 retn
 
 
@@ -9637,12 +9658,12 @@ mp3_cast_to_speaker:
                 push    mp3_waveout_handle ; phwo
                 call    [waveOutOpen]
                 cmp     eax, 0          ; MMSYSERR_NOERROR
-                jz      short @@wave_open_okay
+                jz      short .wave_open_okay
                 mov     edx, txt_waveopen_failed ; "  ERROR: cannot open wave output!\r\n"
                 call    wrstr_edx
-                jmp     @@done_quit
+                jmp     .done_quit
 
-@@wave_open_okay:
+.wave_open_okay:
                 cmp     eax, 0          ; warn_error_eax <'waveOutOpen'>
                 jz      short .no_error
                 pusha
@@ -9683,7 +9704,7 @@ mp3_cast_to_speaker:
                 push    [mp3_waveout_handle] ; hwo
                 call    [waveOutRestart]
                 cmp     eax, 0          ; warn_error_eax <'waveOutRestart'>
-                jz      short @@playback_wait_lop
+                jz      short .playback_wait_lop
                 pusha
                 mov     edx, txt_waveout_error1 ; "\r\n   *** ERROR number "
                 call    wrstr_edx
@@ -9697,14 +9718,14 @@ mp3_cast_to_speaker:
                 mov     [have_wave_error], 1
                 popa
 
-@@playback_wait_lop:
+.playback_wait_lop:
                 mov     eax, [num_enqueued_frames]
                 imul    eax, 10
                 push    eax             ; dwMilliseconds
                 call    [Sleep]
                 mov     eax, [num_enqueued_frames]
                 or      eax, [bytes_left]
-                jnz     short @@playback_wait_lop
+                jnz     short .playback_wait_lop
                 push    [mp3_waveout_handle] ; hwo
                 call    [waveOutReset]
                 cmp     eax, 0          ; warn_error_eax <'waveOutReset'>
@@ -9743,11 +9764,11 @@ mp3_cast_to_speaker:
 
 .no_error@@@:
                 cmp     [have_wave_error], 0 ; warn_error_crash macro
-                jz      short @@done_quit ; .no_crash
+                jz      short .done_quit ; .no_crash
                 xor     ecx, ecx        ; trigger div0 exception
                 div     ecx
 
-@@done_quit:
+.done_quit:
                 retn
 
 
