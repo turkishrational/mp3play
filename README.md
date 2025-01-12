@@ -38,3 +38,8 @@ I think to use/develop 'wave peak points' based frame compression. Decompressed 
 As I have already got big/huge WAV file players (.COM files) for DOS and (.PRG files) TRDOS 386, I think to use same audio buffering and playing logic. So, I see that a new type frame compression -5 to 10 times lossy or 3 to 5 times lossless compression of wav files- will be good for me.)
        
 Erdogan Tan - 18/10/2024
+
+MP3PLAYER demo (youtube): https://youtu.be/kQc7F5pgiYs?si=6p9wkdjeV0P3MyMm (10/01/2025)
+NOTE: Try TRDOS 386 MP3PLAYERs which last modification date is shown as 12/01/2025 or later. You can test them via QEMU package in this repository.
+      Start TRDOS 386 on QEMU and change directory to mp3 and then use/run programs just as old MSDOS programs were used via command.com.
+       
