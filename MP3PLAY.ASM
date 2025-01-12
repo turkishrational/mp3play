@@ -4,7 +4,7 @@
 ;
 ; FASM Source Code: Erdogan Tan - 17/10/2024 (v1.4.0)
 ;
-; [ Last Modification: 20/10/2024 ]
+; [ Last Modification: 22/10/2024 ] (v1.4.1)
 ;
 ; ****************************************************************************
 ; Modified from Martin Korth's 'mp3play.asm' (TASM32) source code... (v1.4)
@@ -25,34 +25,32 @@
                 use32
                 entry start
 
-include 'include/win32a.inc'
-;include 'include/macro/proc32.inc'
-;include 'include/macro/struct.inc'
+; ---------------------------------------------------------------------------
+
+struc		wavehdr_tag a
+ {
+   .lpData          dd a
+   .dwBufferLength  dd a
+   .dwBytesRecorded dd a
+   .dwUser          dd a
+   .dwFlags         dd a
+   .dwLoops         dd a
+   .lpNext          dd a
+   .reserved        dd a
+ }
 
 ; ---------------------------------------------------------------------------
 
-struct          wavehdr_tag ; (sizeof=0x20, standard type)
-lpData          dd ?                    ; offset
-dwBufferLength  dd ?
-dwBytesRecorded dd ?
-dwUser          dd ?
-dwFlags         dd ?
-dwLoops         dd ?
-lpNext          dd ?                    ; offset
-reserved        dd ?
-ends
-
-; ---------------------------------------------------------------------------
-
-struct          WAVEFORMATEX ; (sizeof=0x12, standard type)
-wFormatTag      dw ?
-nChannels       dw ?
-nSamplesPerSec  dd ?
-nAvgBytesPerSec dd ?
-nBlockAlign     dw ?
-wBitsPerSample  dw ?
-cbSize          dw ?
-ends
+struc		WAVEFORMATEX a,b,c,d,e,f,g
+ { 
+   .wFormatTag      dw a
+   .nChannels       dw b
+   .nSamplesPerSec  dd c
+   .nAvgBytesPerSec dd d
+   .nBlockAlign     dw e
+   .wBitsPerSample  dw f
+   .cbSize          dw g
+ }
 
 ; ===========================================================================
 
@@ -79,7 +77,9 @@ start:
                 neg     eax
                 mov     [millisecond_count], eax
                 call    mp3_check_1st_frame
-                jb      .exit
+                ;jb     .exit
+		; 22/10/2024
+		jc	.unmap_close_exit
                 cmp     [option_test], 0
                 jz      short .no_benchmark_test
                 call    mp3_plain_test_without_output
@@ -89,7 +89,9 @@ start:
                 cmp     [mp3_pcm_fname], 0
                 jz      short .no_pcm_verify
                 call    mp3_verify_pcm_file
-                jmp     .exit
+                ;jmp    .exit
+		; 22/10/2024
+		jmp	.unmap_close_exit
 
 .no_pcm_verify:
                 cmp     [mp3_dst_fname], 0
@@ -106,7 +108,7 @@ start:
                 mov     edx, txt_decode_timing1 ; "audio duration "
                 call    wrstr_edx
                 mov     eax, [mp3_total_output_size]
-                mov     edx, 3E8h
+                mov     edx, 1000
                 mul     edx
                 div     [mp3_output_sample_rate]
                 xor     edx, edx
@@ -146,6 +148,10 @@ start:
                 add     esi, 24
                 cmp     esi, mp3_bitrate_tab
                 jnz     short .timelog_lop
+
+		; 22/10/2024
+.unmap_close_exit:
+		call	unmap_and_close_input
 
 .exit:
                 push    0               ; uExitCode
@@ -272,14 +278,14 @@ mp3_recollect_bits:
                 mov     bp, [esi]
                 add     esi, 2
                 ror     bp, 8
-                shl     ebp, 10h
+                shl     ebp, 16
                 mov     ch, 0
                 retn
 
 .odd:
                 movzx   ebp, byte [esi]
                 inc     esi
-                shl     ebp, 10h
+                shl     ebp, 16
                 mov     bp, [esi]
                 add     esi, 2
                 ror     bp, 8
@@ -1096,7 +1102,7 @@ mp3_bitstream_append_to_main_data_pool:
                 push    esi
                 lea     esi, [edi-200h]
                 mov     edi, main_data_pool_start
-                mov     ecx, 80h
+                mov     ecx, 128
                 rep movsd
                 pop     esi
                 pop     ecx
@@ -1109,26 +1115,27 @@ mp3_bitstream_append_to_main_data_pool:
                 cmp     eax, main_data_pool_start
                 js      short .below_pool_start
                 mov     [mp3_bitstream_start], eax
-                mov     eax, 0
+                ; 22/10/2024
+		;mov    eax, 0
                 mov     esi, [mp3_bitstream_start] ; mp3mac_bitstream_set_position
-                mov     cl, al
-                shr     eax, 3
-                and     cl, 7
-                add     esi, eax
+                ;mov    cl, al
+                ;shr    eax, 3
+                ;and    cl, 7
+                ;add    esi, eax
                 call    mp3_recollect_bits
-                mov     eax, ebp        ; mp3mac_get_n_bits cl
-                shl     ebp, cl
-                rol     eax, cl
-                xor     eax, ebp
-                sub     ch, cl
-                jns     short .cont
-                mov     cl, ch          ; mp3mac_collect_more
-                add     ch, 10h
-                rol     ebp, cl
-                mov     bp, [esi]
-                add     esi, 2
-                ror     bp, 8
-                ror     ebp, cl
+                ;mov    eax, ebp        ; mp3mac_get_n_bits cl
+                ;shl    ebp, cl
+                ;rol    eax, cl
+                ;xor    eax, ebp
+                ;sub    ch, cl
+                ;jns    short .cont
+                ;mov    cl, ch          ; mp3mac_collect_more
+                ;add    ch, 10h
+                ;rol    ebp, cl
+                ;mov    bp, [esi]
+                ;add    esi, 2
+                ;ror    bp, 8
+                ;ror    ebp, cl
 
 .cont:
                 test    byte [cpuid_flags], 10h ; timelog_end rdtsc_append_main
@@ -1376,7 +1383,9 @@ mp3_bitstream_read_scalefacs:
                 mov     edx, ecx
                 lea     ecx, [ebx+152]  ; [ebx+$mp3gr_scale_factors+40]
                 sub     ecx, edi
-                jb      short fatal_scalefactors
+                ;jb     short fatal_scalefactors
+		; 21/10/2024
+		jb	short fatalunexpected
                 mov     al, 0
                 rep stosb
                 mov     ecx, edx
@@ -1391,8 +1400,17 @@ mp3_bitstream_read_scalefacs:
 .no_rdtsc_supported@@@:
                 retn
 
-fatal_scalefactors:
-                jmp     fatalunexpected
+		; 21/10/2024
+;fatal_scalefactors:
+                ;jmp    fatalunexpected
+
+; ---------------------------------------------------------------------------
+
+		; 21/10/2024
+fatalunexpected:
+                div     [end_of_wave_headers] ; zero
+hang:
+                jmp     short hang
 
 
 ; =============== S U B R O U T I N E =======================================
@@ -8336,10 +8354,15 @@ mp3_exclude_id3_and_tag:
                 ja      short .no_lyrics
                 cmp     edx, ecx
                 jbe     short .lyrics3_v1_size_lop
-                ;jmp     short .no_lyrics
+                ;jmp    short .no_lyrics
 
 .no_lyrics:
-                jmp     short .footer_tag_all_done
+                ;jmp    short .footer_tag_all_done
+		; 22/10/2024
+.footer_tag_all_done:
+                mov     [stream_pos], esi
+                mov     [bytes_left], ecx
+                retn
 
 .lyrics3_v2:
                 push    ecx
@@ -8361,18 +8384,24 @@ mp3_exclude_id3_and_tag:
                 ;jmp    short .got_tag_size_edx
 
 .got_tag_size_edx:
+		;;;
+		; 22/10/2024
+                sub    ecx, edx
+                jnb    short .cont
+		;;;
                 mov     eax, edx
                 call    wr_decimal_eax
                 call    wrcrlf
-                sub     ecx, edx
-                jb      fatalunexpected
+                ;;;
+		;sub    ecx, edx
+                ;jb     fatalunexpected
+		jmp	fatalunexpected
+.cont:
+		;;;
                 add     [mp3_tag_size], edx
                 jmp     .no_id3
 
-.footer_tag_all_done:
-                mov     [stream_pos], esi
-                mov     [bytes_left], ecx
-                retn
+
 
 
 ; =============== S U B R O U T I N E =======================================
@@ -8530,31 +8559,33 @@ mp3_decode_frame:
                 cmp     eax, [mp3_src_remain]
                 ja      .error
                 mov     [mp3_bitstream_start], esi
-                mov     eax, 32
+                ;mov    eax, 32
 
 .mp3mac_bitstream_set_position:
-                mov     esi, [mp3_bitstream_start]
-                mov     cl, al
-                shr     eax, 3
-                and     cl, 7
-                add     esi, eax
+		; 22/10/2024
+                ;mov    esi, [mp3_bitstream_start]
+                ;mov    cl, al
+                ;shr    eax, 3
+                ;and    cl, 7
+                ;mov	eax, 4
+                ;add    esi, eax
+                add     esi, 4
                 call    mp3_recollect_bits
 
 .mp3mac_get_n_bits:
-                mov     eax, ebp        ; mp3_col3
-                shl     ebp, cl
-                rol     eax, cl
-                xor     eax, ebp        ; mp3_col32
-                sub     ch, cl          ; sub mp3_colNN,num
-                jns     short .cont
-                mov     cl, ch          ;
-                                        ; mov cl,mp3_colNN
-                add     ch, 16
-                rol     ebp, cl         ; rol mp3_col32,cl
-                mov     bp, [esi]       ; mov mp3_col16,word ptr [esi]
-                add     esi, 2
-                ror     bp, 8           ; endianess
-                ror     ebp, cl         ; ror mp3_col32,cl
+                ;mov    eax, ebp        ; mp3_col3
+                ;shl    ebp, cl
+                ;rol    eax, cl
+                ;xor    eax, ebp        ; mp3_col32
+                ;sub    ch, cl          ; sub mp3_colNN,num
+                ;jns    short .cont
+                ;mov    cl, ch          ; mov cl,mp3_colNN
+                ;add    ch, 16
+                ;rol    ebp, cl         ; rol mp3_col32,cl
+                ;mov    bp, [esi]       ; mov mp3_col16,word ptr [esi]
+                ;add    esi, 2
+                ;ror    bp, 8           ; endianess
+                ;ror    ebp, cl         ; ror mp3_col32,cl
 
 .cont:
                 call    mp3_bitstream_read_header_extra
@@ -8727,7 +8758,7 @@ mp3_check_1st_frame:
                 xor     edi, edi
                 xor     ebp, ebp
                 call    mp3_decode_frame
-                jb      .error
+                jc      .error
                 call    mp3_check_xing_info
                 mov     edx, txt_file_size ; "file size: "
                 call    wrstr_edx
@@ -8777,11 +8808,12 @@ mp3_check_1st_frame:
                 call    wrstr_edx
                 call    wrcrlf
                 clc
+.error:		; 21/10/2024
                 retn
 
-.error:
-                stc
-                retn
+;.error:
+                ;stc
+                ;retn
 
 
 ; =============== S U B R O U T I N E =======================================
@@ -9120,7 +9152,8 @@ open_and_mmap_the_file:
                 cmp     eax, 0FFFFFFFFh ; INVALID_HANDLE_VALUE
                 jz      short .not_found
                 push    0               ; lpFileSizeHigh
-                push    [hFile]      ; hFile
+                ;push   [hFile]         ; hFile
+                push	eax
                 call    [GetFileSize]
                 mov     [mp3_file_size], eax
                 mov     [bytes_left], eax
@@ -9129,14 +9162,15 @@ open_and_mmap_the_file:
                 push    0               ; dwMaximumSizeHigh
                 push    2               ; flProtect
                 push    0               ; lpFileMappingAttributes
-                push    [hFile]      ; hFile
+                push    [hFile]         ; hFile
                 call    [CreateFileMappingA]
                 mov     [hMap], eax
                 push    0               ; dwNumberOfBytesToMap
                 push    0               ; dwFileOffsetLow
                 push    0               ; dwFileOffsetHigh
                 push    4               ; dwDesiredAccess
-                push    [hMap]       ; hFileMappingObject
+                ;push   [hMap]		; hFileMappingObject
+                push	eax
                 call    [MapViewOfFile]
                 mov     [stream_start], eax
                 mov     [stream_pos], eax
@@ -9155,6 +9189,24 @@ open_and_mmap_the_file:
                 stc
                 retn
 
+; =============== S U B R O U T I N E =======================================
+
+		; 22/10/2024
+unmap_and_close_input:
+
+		; UnmapViewOfFile(lpMapAddress);
+		push	[stream_start]
+                call    [UnmapViewOfFile]
+
+		; CloseHandle(hMap); 
+		push	[hMap]
+		call	[CloseHandle]
+
+		; CloseHandle(hFile); 
+		push	[hFile]
+		call	[CloseHandle]
+
+		retn
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -9239,9 +9291,9 @@ mp3_create_wav_file:
                 push    [mp3_dst_fname] ; lpFileName
                 call    [CreateFileA]
                 mov     [mp3_wav_handle], eax
-                call    mp3_write_wav_header
-                retn
-
+                ; 22/10/2024
+		;call   mp3_write_wav_header
+                ;retn
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -9249,7 +9301,7 @@ mp3_create_wav_file:
 mp3_write_wav_header:
                 push    0               ; lpOverlapped
                 push    diskresult      ; lpNumberOfBytesWritten
-                push    2Ch             ; nNumberOfBytesToWrite
+                push    44 ; 2Ch        ; nNumberOfBytesToWrite
                 push    mp3_wav_header  ; lpBuffer
                 push    [mp3_wav_handle] ; hFile
                 call    [WriteFile]
@@ -9772,15 +9824,6 @@ mp3_cast_to_speaker:
                 retn
 
 
-; ---------------------------------------------------------------------------
-
-fatalunexpected:                       
-                div     [end_of_wave_headers]
-
-hang:
-                jmp     short hang
-
-
 ; ===========================================================================
 
 section '.data' data readable writeable
@@ -10082,7 +10125,7 @@ huff_tree_list_data db  11h,   1, 10h,   0, 22h,   2, 12h, 21h
                 db    9,   8,   7,   6,   5,   4,   3,   2
                 db    1,   0
                 db 6 dup(0)
-mp3_huff_data   db   0,  0             
+mp3_huff_data   db   0,  0
                 db   1,  0              ; byte[32][2] ; table,linbits
                 db   2,  0
                 db   3,  0
@@ -10179,39 +10222,39 @@ mp3_is_table_normal dd  00000000h, 40000000h
                 dd  28930A30h, 176CF5D1h
                 dd  3279A746h, 0D8658BBh
                 dd  40000000h, 00000000h
-mp3_is_table_lsf_src dd 80000000h      
+mp3_is_table_lsf_src dd 80000000h
                                         ; sqrt based constants...
                                         ; 40000000h*2 ; 2.0  (2^1.00) aka 2
                 dd 6BA27E66h            ; 35D13F33h*2 ; 1.681 (2^0.75)
                 dd 5A82799Ah            ; 2D413CCDh*2 ; 1.414 (2^0.50) aka sqrt(2)
                 dd 4C1BF82Ah            ; 260DFC15h*2 ; 1.189 (2^0.25) aka sqrt(sqrt(2))
-mp3_pow2_quarters dd 80000000h         
+mp3_pow2_quarters dd 80000000h
                                         ; 40000000h*2 ; 2^(0/4)
                 dd 9837F052h            ; 4C1BF829h*2 ; 2^(1/4)
                 dd 0B504F334h           ; 5A82799Ah*2 ; 2^(2/4)
                 dd 0D744FCCCh           ; 6BA27E66h*2 ; 2^(3/4)
-mp3_initialized dd 0                   
-mp3_huff_num_entries dd 12h            
-wrchr_buf       db 0                   
+mp3_initialized dd 0
+mp3_huff_num_entries dd 12h
+wrchr_buf       db 0
                 align 4
 ; LPCSTR mp3_src_fname
-mp3_src_fname   dd 0                   
+mp3_src_fname   dd 0
 ; LPCSTR mp3_dst_fname
-mp3_dst_fname   dd 0                   
+mp3_dst_fname   dd 0
 ; LPCSTR mp3_pcm_fname
-mp3_pcm_fname   dd 0                   
+mp3_pcm_fname   dd 0
 mp3_wav_header  db 'RIFF$',0,0,0,'WAVEfmt ',10h,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,4,0,10h,0,'data',0,0,0,0
-have_wave_error dd 0                   
-num_enqueued_frames dd 0               
+have_wave_error dd 0
+num_enqueued_frames dd 0
 ; HWAVEOUT mp3_waveout_handle
-mp3_waveout_handle dd 0                
+mp3_waveout_handle dd 0
 ; const WAVEFORMATEX mp3_wf
-mp3_wf          WAVEFORMATEX 1, 2, 0, 0, 4, 10h, 0
+mp3_wf WAVEFORMATEX 1,2,0,0,4,10h,0 ; 22/10/2024
                 align 10h
 ; struct wavehdr_tag mp3_wave_headers
-mp3_wave_headers wavehdr_tag 0         
+mp3_wave_headers wavehdr_tag 0  ; 22/10/2024
                 db 224 dup(0)
-end_of_wave_headers dd 0               
+end_of_wave_headers dd 0
 txt_decode_timing1 db 'audio duration ',0
 txt_decode_timing2 db ' milliseconds, decoded in ',0
 txt_decode_timing3 db ' milliseconds',0Dh,0Ah,0
@@ -10449,11 +10492,11 @@ warn_errmsg_8   db 'waveOutClose',0
 txt_ctrlc       db '(press CTRL+C to quit)', 13,10',0
 txt_about       db 13,10
                 db '----------------------------------',13,10
-                db 'Erdogan Tan - 17/10/2024 (Assembler: FASM)', 13,10
+                db 'Erdogan Tan - 22/10/2024 (Assembler: FASM)', 13,10
                 db 'Original code: MP3PLAYER.EXE v1.4 (20/09/2024)', 13,10
                 db '               by Martin Korth (TASM source code)'
                 db 13,10,13,10,0
-                db 'v1.4.0',0
+                db 'v1.4.1',0
 
 ; ===========================================================================
 
@@ -10616,7 +10659,7 @@ _@@granule_addr dd ?
 ; HANDLE hFile
 hFile           dd ?                   
 ; HANDLE hMap
-hMap            dd ?                   
+hMap            dd ?	; 22/10/2024                   
 stream_start    dd ?                   
 stream_pos      dd ?                   
 bytes_left      dd ?                   
@@ -10668,6 +10711,7 @@ section '.idata' import data readable writeable
     GetStdHandle dd rva _GetStdHandle
     GetTickCount dd rva _GetTickCount
     ExitProcess dd rva _ExitProcess
+    UnmapViewOfFile dd rva _UnmapViewOfFile ; 22/10/2024	
     dd 0
 
   kernel_name db 'KERNEL32.DLL',0
@@ -10710,6 +10754,8 @@ section '.idata' import data readable writeable
     db 'GetStdHandle',0
   _GetTickCount dw 0
     db 'GetTickCount',0
+  _UnmapViewOfFile dw 0
+    db 'UnmapViewOfFile',0	; 22/10/2024	
 
   winmm_table:
     waveOutPrepareHeader dd rva _waveOutPrepareHeader
