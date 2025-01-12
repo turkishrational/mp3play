@@ -33,7 +33,7 @@ Perhaps I can modify and optimize source code in near future for increasing spee
 
 NOTE: TRDOS 386 adaptation/port of this MP3 player is not ready yet. (18/10/2024)
 
-      **** TRDOS 386 port/adaptation of NOCASH MP3 PLAYER is READY! (12/01/2025) **** here.. in this repository.
+      **** TRDOS 386 port/adaptation of NOCASH MP3 PLAYER is READY! (12/01/2025) **** here..
 
 (In near future, I also think to develop a compressed audio file format for 16 bit DOS and 32 bit TRDOS. Instead of MP3.
 I think to use/develop 'wave peak points' based frame compression. Decompressed frame will be about 32KB. This buffer size is proper for 16 bit DOS .COM files.
