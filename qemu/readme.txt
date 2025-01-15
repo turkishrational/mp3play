@@ -43,7 +43,7 @@ MP3PTEST.PRG:
 	: Modified MP3PLAY3.PRG to test Interpolation quality
           for running on QEMU and VirtualBOX etc. emulators
 	  (disables detected VRA feature to force interpolation and
-	  setting AC97 audio play frequency to 48 kHZ.) -trick-
+	  sets AC97 audio play frequency to 48 kHZ) -trick-
 
 All of above programs has Sound Blaster 16 support.
 Even if SB16 can not play 48 kHZ audio files (limit is 44.1 kHZ).
