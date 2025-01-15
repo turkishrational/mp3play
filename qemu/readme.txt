@@ -13,7 +13,7 @@ commands.)
 Note: Directory separator is '/' in TRDOS just as in unix/linux.
 
 MP3PTEST.PRG is a test (a bit modified MP3PLAY3.PRG) program
-to check/test interpolation quality of the problem 
+to check/test interpolation quality of the program
 for non-VRA AC97 codecs.
 
 (Emulator's virtual AC97 hardware has VRA feature and this test
@@ -40,24 +40,24 @@ MP3PLAY3.PRG:
 	  -remember: some AC97 audio systems play at 48 kHZ only-	 	
 
 MP3PTEST.PRG:
-	; Modified MP3PLAY3.PRG to test Interpolation quality
-          for running on QEMU and VirualBOX etc. emulators
+	: Modified MP3PLAY3.PRG to test Interpolation quality
+          for running on QEMU and VirtualBOX etc. emulators
 	  (disables detected VRA feature to force interpolation and
 	  setting AC97 audio play frequency to 48 kHZ.) -trick-
 
 All of above programs has Sound Blaster 16 support.
-Even if SB16 can not play 48 KHZ audio files (limit is 44.1 kHZ).
+Even if SB16 can not play 48 kHZ audio files (limit is 44.1 kHZ).
 I have seen QEMU's virtual SB16 hardware can play 48 kHZ audio.
 
 I will write FASM variant of MP3PLAY3.PRG (source code: NASM)
 and MP3PLAY0.PRG will be equilavent of MP3PLAY3.PRG
 (currently it is same with MP3PLAY2.PRG)
 
-In fact.. original and these Nocash MP3PLAYERs are not a player only
+In fact.. original and these Nocash MP3PLAYERs are not a player only..
           they are mp3 decoder, mp3 to wav converter
 	  and frequency converted playback programs.
 	  	 
-MP3PLAY4.PRG and successors will be different.
+MP3PLAY4.PRG and successors will be different (will go to different way).
 -I will focus on playing in text mode and VGA and VESA VBE mode with
 wave lighting graphics like as my playwav programs-
 
