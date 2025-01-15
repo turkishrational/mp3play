@@ -7,7 +7,7 @@
 ; FASM Source Code: Erdogan Tan - 19/10/2024 - 22/10/2024 - 11/01/2025
 ; NASM Source Code: Erdogan Tan - 09/01/2025 - 12/01/2025 (mp3play2.s)
 ;
-; [ Last Modification: 12/01/2025 ] -mp3play2.s in NASM syntax-
+; [ Last Modification: 13/01/2025 ] -mp3play2.s in NASM syntax-
 ;
 ; ----------------------------------------------------------------------------
 ; Modified from on MP3PLAY.ASM (for Windows console) source code - 17/10/2024
@@ -9818,7 +9818,9 @@ open_and_mmap_the_file:
 		; (not necessary for TRDOS 386 PRG files)
 		; (this system call will allocate user memory pages
 		;  before sysread system call.. early)
-		add	eax, end_of_bss
+		;add	eax, end_of_bss
+		; 13/01/2025
+		add	eax, 100000h ; + end of 1st 1MB
 		; TRDOS 386 system call
 		; Set break address
 		; ebx = new [u.break]
@@ -10411,7 +10413,7 @@ mp3_cast_to_speaker:
 		and	al, 0DFh
 		cmp	al, 'H'
 		je	short .hw_info
-		cmp	al,'B'
+		cmp	al, 'B'
 		je	short .b_info
 		jmp	.playback_next
 
@@ -11422,7 +11424,7 @@ txt_ctrlc_size = $ - txt_ctrlc
 txt_about       db 13,10
                 ;db '----------------------------------',13,10
                 db '-----------------------------------',13,10
-                db 'Erdogan Tan - 12/01/2025 (Assembler: FASM)', 13,10
+                db 'Erdogan Tan - 13/01/2025 (Assembler: FASM)', 13,10
                 db 'Original code: MP3PLAYER.EXE v1.4 (20/09/2024)', 13,10
                 db '               by Martin Korth (TASM source code)'
                 db 13,10,13,10,0
