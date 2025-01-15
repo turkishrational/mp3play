@@ -164,16 +164,6 @@ start:
 		jc	.exit
 		;;;
 
-		;;;
-		; 10/01/2025 (Video memory access for buffer change indicator)
-		; DIRECT CGA (TEXT MODE) MEMORY ACCESS
-		; bl = 0, bh = 4
-		; Direct access/map to CGA (Text) memory (0B8000h)
-		sys	_video, 0400h
-		;cmp	eax, 0B8000h
-		;jne	short error_exit
-		;;;
-
                 xor     ebp, ebp
                 call    mp3_init
                 call    open_and_mmap_the_file
@@ -199,8 +189,19 @@ start:
                 cmp     dword [mp3_dst_fname], 0
                 jz      short .no_wav_output
                 call    mp3_cast_to_wav_file
-		jmp     short .decode_done
+		jmp     .decode_done
+
 .no_wav_output:
+		; 15/01/2025
+		; 10/01/2025 (Video memory access for buffer change indicator)
+		; DIRECT CGA (TEXT MODE) MEMORY ACCESS
+		; bl = 0, bh = 4
+		; Direct access/map to CGA (Text) memory (0B8000h)
+		sys	_video, 0400h
+		cmp	eax, 0B8000h
+		jne	.exit	; 15/01/2025
+		;;;
+
 		; 13/01/2025 (interpolation procs for non-VRA AC97 codecs)
 		;;;; --------------------------
 		;mov	byte [interpolation], 0
@@ -238,7 +239,8 @@ start:
 		;call	detect_enable_audio_device
 		;jc	.exit
 		call	audio_system_init
-		jc	.exit
+		;jc	.exit
+		jc	short .exit@ ; 15/01/2025
 		;;;
 
                 call    mp3_cast_to_speaker
@@ -246,8 +248,16 @@ start:
 		; 13/01/2025
 		;;;; --------------------------
 		jmp	short .decode_done
+
+		; 15/01/2025
+.exit@:
+		; Disable audio device
+		sys	_audio, 0C00h
+		jmp	ExitProcess
+
 .indirect:
 		call	audio_system_init_x
+		jc	short .exit@ ; 15/01/2025
 		call    mp3_cast_to_speaker_x
 		;;;; --------------------------
 .decode_done:
@@ -10487,7 +10497,7 @@ mp3_cast_to_speaker_@:
 		and	al, 0DFh
 		cmp	al, 'H'
 		je	short .hw_info
-		cmp	al,'B'
+		cmp	al, 'B'
 		je	short .b_info
 		jmp	.playback_next
 
@@ -10629,6 +10639,7 @@ audio_system_init_x:
 		mov	ebx, convert_to_stereo
 		cmp	byte [mp3_bytes_per_sample], 2
 		je	short .set_sizes ; 16bit mono
+
 		; 8bit output (16bit conversion is neeed)
 		mov	ebx, convert_to_16bit
 		cmp	byte [mp3_output_num_channels], 2
@@ -10912,7 +10923,7 @@ mp3_cast_to_speaker_x:
 		mov	ecx, 48000
 		; 14/01/2025
 		cmp	byte [vra], 1
-		jb	short short .jmpto@
+		jb	short .jmpto@
 		mov	ecx, [mp3_output_sample_rate] 
 .jmpto@:
 %endif
@@ -12491,20 +12502,25 @@ lff11s2_1:
 	mov	ebx, eax
 	lodsw
 	mov	edx, [esi]
-	mov	[next_val_l], edx
+	; 15/01/2025
+	;mov	[next_val_l], edx
 	; 26/11/2023
-	shr	edx, 16
+	;shr	edx, 16
 	;mov	[next_val_r], dx
 	dec	ecx
 	jnz	short lff11s2_2_1
 	xor	edx, edx ; 0
-	mov	[next_val_l], dx
+	;mov	[next_val_l], dx
 	;mov	[next_val_r], dx
 lff11s2_2_1:
 	; bx = [previous_val_l]
 	; ax = [previous_val_r]
 	; [next_val_l]
 	; dx = [next_val_r]
+	;;;
+	; 15/01/2025 (BugFix)
+	mov	[next_val_l], edx
+	;;;
 	call	interpolating_5_16bit_stereo
 	jecxz	lff11s2_3
 lff11s2_2_2:
@@ -12512,17 +12528,22 @@ lff11s2_2_2:
 	mov	ebx, eax
 	lodsw
 	mov	edx, [esi]
-	mov	[next_val_l], dx
+	; 15/01/2025
+	;mov	[next_val_l], dx
 	; 26/11/2023
-	shr	edx, 16
+	;shr	edx, 16
 	;mov	[next_val_r], dx
 	dec	ecx
 	jnz	short lff11s2_2_3
 	xor	edx, edx ; 0
-	mov	[next_val_l], dx
+	;mov	[next_val_l], dx
 	;mov	[next_val_r], dx
 lff11s2_2_3:
- 	call	interpolating_4_16bit_stereo
+	;;;
+	; 15/01/2025 (BugFix)
+	mov	[next_val_l], edx
+	;;;
+	call	interpolating_4_16bit_stereo
 	jecxz	lff11s2_3
 	
 	dec	ebp
@@ -12532,16 +12553,21 @@ lff11s2_2_3:
 	mov	ebx, eax
 	lodsw
 	mov	edx, [esi]
-	mov	[next_val_l], dx
+	; 15/01/2025
+	;mov	[next_val_l], dx
 	; 26/11/2023
-	shr	edx, 16
+	;shr	edx, 16
 	;mov	[next_val_r], dx
 	dec	ecx
 	jnz	short lff11s2_2_4
 	xor	edx, edx ; 0
-	mov	[next_val_l], dx
+	;mov	[next_val_l], dx
 	;mov	[next_val_r], dx
 lff11s2_2_4:
+	;;;
+	; 15/01/2025 (BugFix)
+	mov	[next_val_l], edx
+	;;;
  	call	interpolating_4_16bit_stereo
 	jecxz	lff11s2_3
 	jmp	short lff11s2_1
@@ -13670,7 +13696,6 @@ write_buffer_size:
 	mov	edx, buffersize_txt
 	call	wrstr_edx
 	mov	eax, [buffer_size]
-w_dbuff_size:
 	call	wr_decimal_eax_with_thousands_seperator
 	mov	edx, bytes_txt
 	call	wrstr_edx
@@ -13681,11 +13706,14 @@ write_buffer_size_x:
 	mov	edx, buffers1_txt
 	call	wrstr_edx
 	mov	eax, [loadsize] ; decoding buffer size
-	call	w_dbuff_size
+	; 15/01/2025
+	call	wr_decimal_eax_with_thousands_seperator
+	call	w_dbuff_bytes
 	mov	edx, buffers2_txt
 	call	wrstr_edx
 	mov	eax, [buffer_size] ; wav buffer size
 	call	wr_decimal_eax_with_thousands_seperator
+w_dbuff_bytes:
 	mov	edx, bytes2_txt
 	call	wrstr_edx
 	retn
@@ -14628,7 +14656,7 @@ bytes_left      resd 1
 cmdline_buf	resb 128
 ; HANDLE mp3_wav_handle
 mp3_wav_handle  resd 1
-; HANDLE mp3_pcm_handleü
+; HANDLE mp3_pcm_handle
 mp3_pcm_handle  resd 1
 _@@max_diff     resd 1
 _@@avg_diff     resd 2
@@ -14650,8 +14678,8 @@ alignb 4096
 ;sample_buffer_size equ $-sample_buffer
 
 ; 15/01/2025
-decoding_buffer	resb 32768
-sample_buffer	resb 32768
+decoding_buffer	resb 8192  ; 2*4096 (max. 4608)
+sample_buffer	resb 36864 ; 8*4608
 
 ;alignb 4096
 
