@@ -7,7 +7,7 @@
 ; FASM Source Code: Erdogan Tan - 19/10/2024 - 22/10/2024
 ; NASM Source Code: Erdogan Tan - 09/01/2025
 ;
-; [ Last Modification: 13/01/2025 ]
+; [ Last Modification: 15/01/2025 ]
 ;
 ; ----------------------------------------------------------------------------
 ; Modified from on MP3PLAY.ASM (for Windows console) source code - 17/10/2024
@@ -161,16 +161,6 @@ start:
 		jc	.exit
 		;;;
 
-		;;;
-		; 10/01/2025 (Video memory access for buffer change indicator)
-		; DIRECT CGA (TEXT MODE) MEMORY ACCESS
-		; bl = 0, bh = 4
-		; Direct access/map to CGA (Text) memory (0B8000h)
-		sys	_video, 0400h
-		;cmp	eax, 0B8000h
-		;jne	short error_exit
-		;;;
-
                 xor     ebp, ebp
                 call    mp3_init
                 call    open_and_mmap_the_file
@@ -184,8 +174,9 @@ start:
                 cmp     byte [option_test], 0
                 jz      short .no_benchmark_test
                 call    mp3_plain_test_without_output
-                jmp     short .decode_done
 
+                jmp    .decode_done
+ 
 .no_benchmark_test:
                 cmp     dword [mp3_pcm_fname], 0
                 jz      short .no_pcm_verify
@@ -199,15 +190,57 @@ start:
                 jmp     short .decode_done
 
 .no_wav_output:
+		; 15/01/2025
+		; 10/01/2025 (Video memory access for buffer change indicator)
+		; DIRECT CGA (TEXT MODE) MEMORY ACCESS
+		; bl = 0, bh = 4
+		; Direct access/map to CGA (Text) memory (0B8000h)
+		sys	_video, 0400h
+		cmp	eax, 0B8000h
+		jne	.exit	; 15/01/2025
+		;;;
+
+		; 15/01/2025
+		;;;; --------------------------
+		;mov	byte [convert], 0
+		mov	al, 2 
+		cmp	[audio_hardware], al ; 2
+		jne	short .direct
+
+		cmp	byte [mp3_output_num_channels], 2
+		jb	short .indirect	; mono (8bit or 16bit)
+		cmp	[mp3_bytes_per_sample], al ; 2
+		jb	short .indirect
+.direct:
+		;;;; --------------------------
+
 		;;; 
 		; 20/10/2024
 		;call	detect_enable_audio_device
 		;jc	.exit
 		call	audio_system_init
-		jc	.exit
+		;jc	.exit
+		jc	short .exit@ ; 15/01/2025
 		;;;
 
                 call    mp3_cast_to_speaker
+
+		; 13/01/2025
+		;;;; --------------------------
+		jmp	short .decode_done
+
+		; 15/01/2025
+.exit@:
+		; Disable audio device
+		sys	_audio, 0C00h
+		jmp	ExitProcess
+
+.indirect:
+		inc	byte [convert] ; 1
+		call	audio_system_init_x
+		jc	short .exit@
+		call    mp3_cast_to_speaker_x
+		;;;; --------------------------
 
 .decode_done:
                 call    GetTickCount
@@ -10240,6 +10273,7 @@ audio_system_init:
 		jc	short .init_err
 		retn
 .init_err:
+init_error:	; 13/01/2025
 		mov	edx, txt_audio_init_err
                 call    wrstr_edx
                 stc
@@ -10273,10 +10307,30 @@ audio_callback:
 
 ; =============== S U B R O U T I N E =======================================
 
+		; 15/01/2025 (mp3play3.s & mp3play2.s)
+		; 13/01/2025
 		; 12/01/2025
 		; 10/01/2025
 		; 21/10/2024
 mp3_cast_to_speaker:
+; 13/01/2025
+%if 1
+		; Start	to play
+		mov	eax, [mp3_bytes_per_sample]
+		;shr	al, 1 ; 8 -> 0, 16 -> 1
+		;shl	al, 1 ; 16 -> 2, 8 -> 0
+		and	al, 2 ; 22/10/2024
+		mov	ebx, [mp3_output_num_channels]
+		dec	ebx
+		or	bl, al
+		mov	ecx, [mp3_output_sample_rate]
+		mov	bh, 4 ; start to play
+
+		; 13/01/2025
+mp3_cast_to_speaker_@:		
+		push	ebx
+		push	ecx
+%endif
                 ; 12/01/2025
 		;call	try_enqueue_all_blocks
 	
@@ -10288,7 +10342,7 @@ mp3_cast_to_speaker:
 		; (here audio buffer -sample_buffer- is empty)
 		; (clear dma half buffer 1)
 		sys	_audio, 1001h
-		; (clear dma half buffer 2)		
+		; (clear dma half buffer 2)
 		;sys	_audio, 1002h
 
 		; TRDOS 386 system call
@@ -10310,7 +10364,8 @@ mp3_cast_to_speaker:
 
 		;mov	byte [volume_level], 1Dh
 		mov	[volume_level], cl
-
+; 13/01/2025
+%if 0
 		; Start	to play
 		mov	eax, [mp3_bytes_per_sample]
 		;shr	al, 1 ; 8 -> 0, 16 -> 1
@@ -10321,7 +10376,10 @@ mp3_cast_to_speaker:
 		or	bl, al
 		mov	ecx, [mp3_output_sample_rate]
 		mov	bh, 4 ; start to play
-
+%else
+		pop	ecx ; sample rate (frequency)
+		pop	ebx ; play mode (bl)
+%endif
 		; TRDOS 386 system call
 		; sysaudio
 		; bh = 4 -> start to play
@@ -10349,14 +10407,37 @@ mp3_cast_to_speaker:
 		mov	[srb], al ; 0
 		; 12/01/2025
 		;call	try_enqueue_all_blocks
+		; 15/01/2025
+		;cmp	byte [blocks], 0 ; interpolation ?
+		;jna	short .interpolated ; yes
+		; 15/01/2025 (mp3play2.s)
+		cmp	byte [convert], 0
+		ja	short .converted
+
+		; 15/01/2025
+		mov	ah, 4Eh ; red background, yellow font 
+.indicator:
 		;;; 10/01/2025
 		mov	al, [half_buffer]
 		xor	byte [half_buffer], 1
+		;mov	ah, 4Eh
 		add	al, '1'
-		mov	ah, 4Eh
-		mov	[0B8000h], ax 
+		mov	[0B8000h], ax
 		;;;	
 		jmp	short .playback_lop
+
+.converted:
+;.interpolated:
+		; 15/01/2025
+		; (a solution for very fast indicator digit change)
+		; (8 to 1)
+		inc	byte [counter]
+		mov	al, [counter]
+		and	al, 7
+		jnz	short .playback_lop
+		mov	ah, 1Eh ; blue background, yellow font
+		jmp	short .indicator
+
 .playback_end:
 		;;; 10/01/2025
 		mov	ax, 4E30h
@@ -10381,7 +10462,7 @@ mp3_cast_to_speaker:
 		; BL = 1 -> read a character on stdin (no wait)
 		sys	_stdio, 1
 		and	eax, eax
-		jz	short .playback_next
+		jz	.playback_next ; 15/01/2024
 
 		cmp	al, '+' ; increase sound volume
 		je	short .inc_volume
@@ -10401,7 +10482,7 @@ mp3_cast_to_speaker:
 		and	al, 0DFh
 		cmp	al, 'H'
 		je	short .hw_info
-		cmp	al,'B'
+		cmp	al, 'B'
 		je	short .b_info
 		jmp	.playback_next
 
@@ -10439,22 +10520,197 @@ mp3_cast_to_speaker:
 
 
 ; =============== S U B R O U T I N E =======================================
-
+		
+		; 15/01/2025 (mp3play2.s) -interpolation excluded-
+		; 13/01/2025 (mp3play3.s) -interpolation included-
 		; 12/01/2025
 		; 09/01/2025
 		; 21/10/2024
 try_enqueue_all_blocks:
 		; 12/01/2025
-		pusha	 	
+		pusha
  		mov	edi, sample_buffer
 		; 10/01/2025
+		;jmp	short .first_block
+		; 13/01/2025
+		jmp	short try_enqueue_all_blocks_@
+;.next_block:
+teab_next_block:
+                cmp	dword [bytes_left], 0
+                ;jle	short .enqueue_done
+		; 13/01/2025
+		jle	short teab_enqueue_done
+		;
+		mov	edi, [mp3_samples_dst]
+		add	edi, [mp3_samples_output_size]
+
+try_enqueue_all_blocks_@:
+;.first_block:
+		;pusha
+		mov	esi, [stream_pos]
+		mov	ecx, [bytes_left]
+		xor	ebp, ebp
+		call	mp3_decode_frame
+		;popa
+		;jc	short .enqueue_done
+		; 13/01/2025
+		jc	short teab_enqueue_done
+		mov	eax, [mp3_src_frame_size]
+		cmp	eax, 0
+		;jz	short .enqueue_done
+		; 13/01/2025
+		jz	short teab_enqueue_done
+		add	[stream_pos], eax
+		sub	[bytes_left], eax
+		mov	eax, [mp3_samples_output_size]
+		cmp	eax, 0
+		;jz	short .next_block
+		; 13/01/2025
+		jz	short teab_next_block
+;.no_error:
+		inc	byte [num_enqueued_frames]
+		mov	al, [num_enqueued_frames]
+		cmp	al, [blocks]
+		;jb	short .next_block
+		; 13/01/2025
+		jb	short teab_next_block
+teab_rtn:
+;.rtn:
+		; 12/01/2025
+		popa
+		retn
+;.enqueue_done:
+teab_enqueue_done:
+                mov	dword [bytes_left], 0
+		; 12/01/2025
+		;jmp	short .rtn
+		; 13/01/2025
+		jmp	short teab_rtn
+
+
+; ---------------------------------------------------------------------------
+; 15/01/2025 - mono to stereo - 8bit to 16bit - conversion procedures (AC97)
+; ---------------------------------------------------------------------------
+
+; =============== S U B R O U T I N E =======================================
+		
+		; 15/01/2025
+audio_system_init_x:
+		mov	ecx, [mp3_samples_output_size]
+		mov	eax, ecx
+
+		; 48 kHZ with 16 bit stereo conversion
+		;
+		; selected output is
+		;	 8bit stereo or 16bit mono or 8bit mono
+		; (but AC97 hardware needs 16bit stereo samples)
+	
+		shl	eax, 1 ; * 2 (mono to stereo)
+
+		mov	ebx, convert_to_stereo
+		cmp	byte [mp3_bytes_per_sample], 2
+		je	short .set_sizes ; 16bit mono
+
+		; 8bit output (16bit conversion is neeed)
+		mov	ebx, convert_to_16bit
+		cmp	byte [mp3_output_num_channels], 2
+		je	short .set_sizes ; 8bit stereo
+		; 8bit mono output
+		shl	eax, 1
+		mov	ebx, convert_to_stereo_16bit
+.set_sizes:
+		mov	[conversion], ebx
+		mov	[loadsize], ecx
+		;;;
+		; align to 16bit stereo (if there is a defect)
+		;and	al, ~3
+		mov	[buffer_size], eax
+		;;;
+.asix_@:
+		; TRDOS 386 system call
+		; sysaudio
+		; Allocate audio buffer (for user)
+		; ebx = 0200h (BH=2)
+		; ecx = buffer size (in bytes)
+		; edx = buffer address (virtual)
+
+		sys	_audio, 0200h, [buffer_size], sample_buffer
+		jc	short .init_err
+
+		; clear audio buffer (before playback)
+		mov	edi, sample_buffer
+		; ecx = buffer size in bytes
+		add	ecx, 3	; 13/01/2025
+		shr	ecx, 2
+		xor	eax, eax
+		rep	stosd
+
+		; TRDOS 386 system call
+		; sysaudio
+		; Initialize audio device (bh = 3)
+		; bl = 01h -> CallBack method
+		; edx = Callback service address (virtual)
+		; ecx = 0 ; CL = srb value ; not used
+		sys	_audio, 0301h, 0, audio_callback_x
+		jc	short .init_err
+		retn
+.init_err:
+		jmp	init_error
+
+
+; =============== S U B R O U T I N E =======================================
+
+		; 15/01/2025 (mp3play2.s)
+		; 14/01/2025 (mp3play3.s)
+		; 13/01/2025
+mp3_cast_to_speaker_x:
+; 13/01/2025
+%if 0
+		; Start	to play
+		mov	eax, [mp3_bytes_per_sample]
+		;shr	al, 1 ; 8 -> 0, 16 -> 1
+		;shl	al, 1 ; 16 -> 2, 8 -> 0
+		and	al, 2
+		mov	ebx, [mp3_output_num_channels]
+		dec	ebx
+		or	bl, al
+		mov	ecx, [mp3_output_sample_rate]
+		mov	bh, 4 ; start to play
+%else
+		;; 48 kHZ, 16bit, stereo
+		mov	ebx, 0403h
+		; 15/01/2025
+		;mov	ecx, 48000
+		;; 14/01/2025
+		;cmp	byte [vra], 1
+		;jb	short .jmpto@
+		mov	ecx, [mp3_output_sample_rate]
+;.jmpto@:
+%endif
+		jmp	mp3_cast_to_speaker_@
+
+
+; =============== S U B R O U T I N E =======================================
+
+		; 15/01/2025 (mp3play3.s & mp3play2.s)
+		; 13/01/2025
+try_enqueue_all_blocks_x:
+		; 12/01/2025
+		pusha
+ 		mov	edi, decoding_buffer
+		; 15/01/2025
+		;jmp	try_enqueue_all_blocks_@
 		jmp	short .first_block
+
+		; 15/01/2025
 .next_block:
                 cmp	dword [bytes_left], 0
                 jle	short .enqueue_done
 		;
 		mov	edi, [mp3_samples_dst]
 		add	edi, [mp3_samples_output_size]
+
+;try_enqueue_all_blocks_@:
 .first_block:
 		;pusha
 		mov	esi, [stream_pos]
@@ -10463,19 +10719,22 @@ try_enqueue_all_blocks:
 		call	mp3_decode_frame
 		;popa
 		jc	short .enqueue_done
+
 		mov	eax, [mp3_src_frame_size]
 		cmp	eax, 0
 		jz	short .enqueue_done
 		add	[stream_pos], eax
 		sub	[bytes_left], eax
+
 		mov	eax, [mp3_samples_output_size]
 		cmp	eax, 0
 		jz	short .next_block
+
+		; 15/01/2025
+		call	dword [conversion]
 .no_error:
+		; 15/01/2025
 		inc	byte [num_enqueued_frames]
-		mov	al, [num_enqueued_frames]
-		cmp	al, [blocks]
-		jb	short .next_block
 .rtn:
 		; 12/01/2025
 		popa
@@ -10486,11 +10745,117 @@ try_enqueue_all_blocks:
 		jmp	short .rtn
 
 
+; =============== S U B R O U T I N E =======================================
+
+		; 15/01/2025 (mp3play3.s & mp3play1.s)
+		; 13/01/2025 
+audio_callback_x:
+		; Operating system has directed CPU here because of
+		; user (2nd) stage of the audio hardware interrupt service.
+		; This procedure must be short and return to operating
+		; system again via sysrelease system call
+		; (or any system call here will be handled as sysrelease).
+
+		mov	byte [srb], 1
+
+		call	try_enqueue_all_blocks_x
+
+		; 15/01/2025
+		;call	dword [conversion]
+
+		sys	_rele ; return from callback service 
+		
+		; we must not come here !
+		mov	ebx, -1
+		sys	_exit
+		;jmp	short audio_callback
+
+
+; ---------------------------------------------------------------------------
+; conversion procedures
+; ---------------------------------------------------------------------------
+
+; 15/01/2025 (mp3play1.s)
+; 13/01/2025 (mp3play3.s)
+
+; convert_to_stereo: convert 16bit mono samples to 16bit stereo
+; convert_to_16bit: convert 8bit stereo samples to 16bit stereo	
+; convert_to_stereo_16bit: convert 8bit mono samples to 16bit & stereo
+; [loadsize] = decoding buffer size
+; [buffer_size] = wav output buffer size (<= 64KB)
+
+; =============== S U B R O U T I N E =======================================
+
+; /////
+
+	; 13/01/2025
+convert_to_stereo:
+	mov	esi, decoding_buffer ; (contains 16bit mono samples)
+	mov	edi, sample_buffer ; wav output buffer
+	mov	ecx, [loadsize]
+	shr	ecx, 1 ; word count
+cts_1:
+	lodsw
+	stosw	; left channel
+	stosw	; right channel
+	loop	cts_1
+cts_2:
+	; padfill
+	mov	ecx, [buffer_size] 
+	add	ecx, sample_buffer
+	sub	ecx, edi
+	jna	short cts_3
+	xor	eax, eax
+	rep	stosb
+cts_3:
+	retn
+
+; =============== S U B R O U T I N E =======================================
+
+; /////
+
+	; 13/01/2025
+convert_to_16bit:
+	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
+	mov	edi, sample_buffer ; wav output buffer
+	mov	ecx, [loadsize]
+ct16b_1:
+	; stereo & 8 bit
+	lodsb
+	sub	al, 80h ; 08/11/2023
+	shl	eax, 8 ; convert 8 bit sample to 16 bit sample
+	stosw
+	loop	ct16b_1
+	jmp	short cts_2
+
+; =============== S U B R O U T I N E =======================================
+
+; /////
+
+	; 13/01/2025
+convert_to_stereo_16bit:
+	mov	esi, decoding_buffer ; (contains 8bit mono samples)
+	mov	edi, sample_buffer ; wav output buffer
+	mov	ecx, [loadsize]
+cts16b_1:
+	; mono & 8 bit
+	lodsb
+	sub	al, 80h ; 08/11/2023
+	shl	eax, 8 ; convert 8 bit sample to 16 bit sample
+	stosw	; left channel
+	stosw	; right channel
+	loop	cts16b_1
+	jmp	short cts_2
+
+; /////
+
+
 ; ---------------------------------------------------------------------------
 ; 12/01/2025- Hardware Info display/write procedures.
 ; ---------------------------------------------------------------------------
 ; ref: playwav9.s (18/12/2024) - sb16play.s (20/12/2024)
 
+	; 15/01/2025 (mp3play3.s & mp3play2.s)
 	; 12/01/2025
 write_audio_dev_info:
 	cmp	byte [audio_hardware], 2
@@ -10694,6 +11059,8 @@ _w_VRAi_no:
 
 ; ---------------------------------------------------------------------------
 
+	; 15/01/2025
+	; 13/01/2025
 	; 12/01/2025
 write_buffer_size:
 	;;;	
@@ -10701,11 +11068,33 @@ write_buffer_size:
 	add	al, '0'
 	mov	byte [blocks_txt], al
 	;;;
+	;cmp	byte [interpolation], 1
+	; 15/01/2025 (mp3play2.s)
+	cmp	byte [convert], 1
+	jnb	short write_buffer_size_x
+	;;;
 	mov	edx, buffersize_txt
 	call	wrstr_edx
-	mov	eax, [buffer_size]	
+	mov	eax, [buffer_size]
 	call	wr_decimal_eax_with_thousands_seperator
 	mov	edx, bytes_txt
+	call	wrstr_edx
+	retn
+
+	; 13/01/2025 (Indirect interpolation info)
+write_buffer_size_x:
+	mov	edx, buffers1_txt
+	call	wrstr_edx
+	mov	eax, [loadsize] ; decoding buffer size
+	; 15/01/2025
+	call	wr_decimal_eax_with_thousands_seperator
+	call	w_dbuff_bytes
+	mov	edx, buffers2_txt
+	call	wrstr_edx
+	mov	eax, [buffer_size] ; wav buffer size
+	call	wr_decimal_eax_with_thousands_seperator
+w_dbuff_bytes:
+	mov	edx, bytes2_txt
 	call	wrstr_edx
 	retn
 
@@ -10716,6 +11105,13 @@ buffersize_txt	db 0Dh, 0Ah
 ;bytes_txt:	db ' bytes ', 0Dh, 0Ah, 0
 bytes_txt:	db ' bytes ('
 blocks_txt	db '0 blocks) ', 0Dh, 0Ah, 0
+
+; 13/01/2025
+buffers1_txt	db 0Dh, 0Ah
+		db 'Buffer size for', 0Dh, 0Ah
+		db '    decoding is ', 0
+buffers2_txt	db '  wav output is ', 0
+bytes2_txt:	db ' bytes ', 0Dh, 0Ah, 0
 
 ; ---------------------------------------------------------------------------
 
@@ -10757,7 +11153,9 @@ msgSB16Info	db 0Dh, 0Ah
 msgBasePort	db "000h", 0Dh, 0Ah 
 		db "            IRQ: "
 msgIRQnum	db 30h		; 12/01/2025
+crlf:		; 13/01/2025
 		db 0Dh, 0Ah, 0
+
 
 ; ===========================================================================
 ; end of TRDOS 386 specific procedures.
@@ -11412,7 +11810,7 @@ txt_ctrlc_size equ $ - txt_ctrlc
 txt_about       db 13,10
                 ;db '----------------------------------',13,10
                 db '-----------------------------------',13,10
-                db 'Erdogan Tan - 13/01/2025 (Assembler: NASM)', 13,10
+                db 'Erdogan Tan - 15/01/2025 (Assembler: NASM)', 13,10
                 db 'Original code: MP3PLAYER.EXE v1.4 (20/09/2024)', 13,10
                 db '               by Martin Korth (TASM source code)'
                 db 13,10,13,10,0
@@ -11456,7 +11854,21 @@ volume_level	resb 1
 blocks		resb 1
 		resb 1
 buffer_size	resd 1
-;;;	
+;;;
+
+; 15/01/2025 (mp3play2.s)
+;;;;
+; 13/01/2025 (Interpolation parameters)
+conversion	resd 1	; pointer to convers(t)ion
+			; or interpolation proc address
+loadsize	resd 1	; decoding buffer size
+;interpolation	resb 1	; interpolation status
+convert		resb 1	; mono to stereo or 8bit to 16bit
+			; conversion flag ; 15/01/2025
+counter		resb 1  ; 15/01/2025
+		resw 1
+;;;;
+	
 
 mp3_context_start:
 main_data_pool_start	resb 4096
@@ -11632,12 +12044,13 @@ alignb 4096
 
 ; 12/01/2025
 ; 09/01/2025
-sample_buffer	resb 36864
-;sample_buffer	resb 8*MP3_MAX_OUTPUT_SIZE
-;sample_buffer_size equ $-sample_buffer
+;sample_buffer	resb 36864
+;;sample_buffer	resb 8*MP3_MAX_OUTPUT_SIZE
+;;sample_buffer_size equ $-sample_buffer
 
-; 10/01/2025
-;sample_buffer	resb 65536
+; 15/01/2025
+decoding_buffer	resb 8192  ; 2*4096 (max. 4608)
+sample_buffer	resb 36864 ; 8*4608
 
 ;alignb 4096
 
