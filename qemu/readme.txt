@@ -4,7 +4,7 @@ extract zip file to a directory/folder (for example: TRDOS386)
 and run trdos386cboot_mp3.cmd for ac97 test
         trdos386cboot2_mp3.cmd for sb16 test
 
-after c:> prompt appears, write 'cd mp3' then
+after c:/> prompt appears, write 'cd mp3' then
 'dir' to see mp3 files and program files.
 
 (Use '?' to see valid -trdos command interpreter- commands.
