@@ -36,7 +36,7 @@ MP3PLAY1.PRG:
 MP3PLAY3.PRG:
 	: with interpolation and with buffer/interrupt indicator
 	  (will play -44 kHZ and other freqs- mp3 files at normal speed)
-	  proper to use on real computer in addition to emulators.
+	  proper to use on real computer in addition to emulators
 	  -remember: some AC97 audio systems play at 48 kHZ only-	 	
 
 MP3PTEST.PRG:
