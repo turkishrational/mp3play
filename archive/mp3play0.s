@@ -4,10 +4,10 @@
 ; Based on 
 ; NOCASH MP3PLAY.EXE 1.4 (Windows) ASM source code (Martin Korth, 20/09/2024)
 ;
-; FASM Source Code: Erdogan Tan - 19/10/2024 - 22/10/2024
-; NASM Source Code: Erdogan Tan - 09/01/2025
+; FASM Source Code: Erdogan Tan - 19/10/2024 - 22/10/2024 - 11/01/2025
+; NASM Source Code: Erdogan Tan - 09/01/2025 - 12/01/2025 (mp3play2.s)
 ;
-; [ Last Modification: 13/01/2025 ]
+; [ Last Modification: 13/01/2025 ] -mp3play2.s in NASM syntax-
 ;
 ; ----------------------------------------------------------------------------
 ; Modified from on MP3PLAY.ASM (for Windows console) source code - 17/10/2024
@@ -26,16 +26,127 @@
 ; (This) modified MP3PLAY.EXE (v1.4.0, 17/10/2024) is 37888 bytes.
 ;
 ; ---------------------------------------------------------------------------
-; nasm mp3play.s -l mp3play.txt -o MP3PLAY.PRG -Z error.txt
+; Assembler: FASM
+; ---------------
+; fasm mp3play.s MP3PLAY.PRG
 
+
+; ===========================================================================
+;  TRDOS 386 Operating System Specific Procedures - Erdogan Tan - 20/10/2024
+; ===========================================================================
+
+; 20/10/2024
+; 20/08/2024 ; TRDOS 386 v2.0.9
+; TRDOS 386 system calls
+_ver 	equ 0
+_exit 	equ 1
+_fork 	equ 2
+_read 	equ 3
+_write	equ 4
+_open	equ 5
+_close 	equ 6
+_wait 	equ 7
+_creat 	equ 8
+_rename equ 9
+_delete equ 10
+_exec	equ 11
+_chdir	equ 12
+_time 	equ 13
+_mkdir 	equ 14
+_chmod	equ 15
+_rmdir	equ 16
+_break	equ 17
+_drive	equ 18
+_seek	equ 19
+_tell 	equ 20
+_mem	equ 21
+_prompt	equ 22
+_path	equ 23
+_env	equ 24
+_stime	equ 25
+_quit	equ 26
+_intr	equ 27
+_dir	equ 28
+_emt 	equ 29
+_ldvrt 	equ 30
+_video 	equ 31
+_audio	equ 32
+_timer	equ 33
+_sleep	equ 34
+_msg    equ 35
+_geterr	equ 36
+_fpsave	equ 37
+_pri	equ 38
+_rele	equ 39
+_fff	equ 40
+_fnf	equ 41
+_alloc	equ 42
+_dalloc equ 43
+_calbac equ 44
+_dma	equ 45
+_stdio  equ 46	;  TRDOS 386 v2.0.9
+
+; ---------------------------------------------------------------------------
+; 'sys' macro in FASM format
+; ---------------------------------------------------------------------------
+
+; 11/01/2025
+if 1
+;%if 0
+macro sys op1,op2,op3,op4
+{
+    if op4 eq 
+    else
+        mov edx, op4
+    end if
+    if op3 eq
+    else
+        mov ecx, op3
+    end if
+    if op2 eq
+    else
+        mov ebx, op2
+    end if
+    mov eax, op1
+    int 40h
+}
+;%endif
+end if
+
+; ---------------------------------------------------------------------------
+; 'sys' macro in NASM format
+; ---------------------------------------------------------------------------
+; 09/01/2025
+
+; 11/01/2025
+if 0
+;%macro sys 1-4
+    ; 29/04/2016 - TRDOS 386 (TRDOS v2.0)
+    ; 03/09/2015
+    ; 13/04/2015
+    ; Retro UNIX 386 v1 system call.
+    %if %0 >= 2
+        mov ebx, %2
+        %if %0 >= 3
+            mov ecx, %3
+            %if %0 = 4
+               mov edx, %4
+            %endif
+        %endif
+    %endif
+    mov eax, %1
+    ;int 30h
+    int 40h ; TRDOS 386 (TRDOS v2.0)
+;%endmacro
+end if
 
 ; ===========================================================================
 ; CODE
 ; ===========================================================================
 
-		[BITS 32] ; 32-bit intructions
-
-		[ORG 0]
+		format binary
+                use32
+                ;org 0x0
 
 ; ===========================================================================
 
@@ -53,6 +164,22 @@ start:
                 call    get_commandline
                 jc      .exit
 
+		;;;
+		; 11/01/2025
+		call	detect_enable_audio_device
+		jc	.exit
+		;;;
+
+		;;;
+		; 10/01/2025 (Video memory access for buffer change indicator)
+		; DIRECT CGA (TEXT MODE) MEMORY ACCESS
+		; bl = 0, bh = 4
+		; Direct access/map to CGA (Text) memory (0B8000h)
+		sys	_video, 0400h
+		;cmp	eax, 0B8000h
+		;jne	short error_exit
+		;;;
+
                 xor     ebp, ebp
                 call    mp3_init
                 call    open_and_mmap_the_file
@@ -61,12 +188,6 @@ start:
                 call    GetTickCount
                 neg     eax
                 mov     [millisecond_count], eax
-
-		;;;
-		; 11/01/2025
-		call	detect_enable_audio_device
-		jc	.exit
-		;;;
 
                 call    mp3_check_1st_frame
                 jc      .exit
@@ -157,7 +278,9 @@ start:
 detect_cpu_386_and_up:
                 mov     byte [detected_cpu], 3
                 mov     ebx, esp
-                and     esp, ~3 ; not 3
+		;and	esp, ~3
+		; 11/01/2025
+                and     esp, not 3
                 pushf
                 pop     eax
                 mov     ecx, eax
@@ -8925,7 +9048,7 @@ wrhexeax:
 
 ; =============== S U B R O U T I N E =======================================
 
-%if 0
+if 0
 
 get_commandline:
                 call    [GetCommandLineA]
@@ -9043,11 +9166,11 @@ get_commandline:
                 stc
                 retn
 
-%endif
+end if
 
 ; =============== S U B R O U T I N E =======================================
 
-%if 0
+if 0
 
 _@@get_item:
                 lodsb
@@ -9080,12 +9203,12 @@ _@@get_item:
                 dec     esi
                 retn
 
-%endif
+end if
 
 ; =============== S U B R O U T I N E =======================================
 
 
-%if 0
+if 0
 
 open_and_mmap_the_file:
                 push    0               ; hTemplateFile
@@ -9135,7 +9258,7 @@ open_and_mmap_the_file:
                 stc
                 retn
 
-%endif
+end if
 
 
 ; =============== S U B R O U T I N E =======================================
@@ -9473,111 +9596,6 @@ mp3_close_pcm_file:
 		retn
 
 
-; ===========================================================================
-;  TRDOS 386 Operating System Specific Procedures - Erdogan Tan - 20/10/2024
-; ===========================================================================
-
-; 20/10/2024
-; 20/08/2024 ; TRDOS 386 v2.0.9
-; TRDOS 386 system calls
-_ver 	equ 0
-_exit 	equ 1
-_fork 	equ 2
-_read 	equ 3
-_write	equ 4
-_open	equ 5
-_close 	equ 6
-_wait 	equ 7
-_creat 	equ 8
-_rename equ 9
-_delete equ 10
-_exec	equ 11
-_chdir	equ 12
-_time 	equ 13
-_mkdir 	equ 14
-_chmod	equ 15
-_rmdir	equ 16
-_break	equ 17
-_drive	equ 18
-_seek	equ 19
-_tell 	equ 20
-_mem	equ 21
-_prompt	equ 22
-_path	equ 23
-_env	equ 24
-_stime	equ 25
-_quit	equ 26
-_intr	equ 27
-_dir	equ 28
-_emt 	equ 29
-_ldvrt 	equ 30
-_video 	equ 31
-_audio	equ 32
-_timer	equ 33
-_sleep	equ 34
-_msg    equ 35
-_geterr	equ 36
-_fpsave	equ 37
-_pri	equ 38
-_rele	equ 39
-_fff	equ 40
-_fnf	equ 41
-_alloc	equ 42
-_dalloc equ 43
-_calbac equ 44
-_dma	equ 45
-_stdio  equ 46	;  TRDOS 386 v2.0.9
-
-; ---------------------------------------------------------------------------
-; 'sys' macro in FASM format
-; ---------------------------------------------------------------------------
-
-%if 0
-macro sys op1,op2,op3,op4
-{
-    if op4 eq 
-    else
-        mov edx, op4
-    end if
-    if op3 eq
-    else
-        mov ecx, op3
-    end if
-    if op2 eq
-    else
-        mov ebx, op2
-    end if
-    mov eax, op1
-    int 40h
-}
-%endif
-
-; ---------------------------------------------------------------------------
-; 'sys' macro in NASM format
-; ---------------------------------------------------------------------------
-; 09/01/2025
-
-%macro sys 1-4
-    ; 29/04/2016 - TRDOS 386 (TRDOS v2.0)
-    ; 03/09/2015
-    ; 13/04/2015
-    ; Retro UNIX 386 v1 system call.
-    %if %0 >= 2
-        mov ebx, %2
-        %if %0 >= 3
-            mov ecx, %3
-            %if %0 = 4
-               mov edx, %4
-            %endif
-        %endif
-    %endif
-    mov eax, %1
-    ;int 30h
-    int 40h ; TRDOS 386 (TRDOS v2.0)
-%endmacro
-
-; ---------------------------------------------------------------------------
-
 ; =============== S U B R O U T I N E =======================================
 
 		; 20/10/2024
@@ -9731,8 +9749,11 @@ set_break:
 		; TRDOS 386 system call
 		; Set break address
 		; ebx = new [u.break]
-		sys	_break, end_of_bss
+		;sys	_break, end_of_bss
 		; eax = new break address (dword aligned)
+
+		; 10/01/2025
+		sys	_break, 100000h ; end of 1st 1MB
 
                 mov	[stream_start], eax
                 mov	[stream_pos], eax
@@ -9797,7 +9818,9 @@ open_and_mmap_the_file:
 		; (not necessary for TRDOS 386 PRG files)
 		; (this system call will allocate user memory pages
 		;  before sysread system call.. early)
-		add	eax, end_of_bss
+		;add	eax, end_of_bss
+		; 13/01/2025
+		add	eax, 100000h ; + end of 1st 1MB
 		; TRDOS 386 system call
 		; Set break address
 		; ebx = new [u.break]
@@ -10035,6 +10058,7 @@ CloseFile:
 
 ; =============== S U B R O U T I N E =======================================
 
+
 		; 10/01/2025
 		; 20/10/2024
 detect_enable_audio_device:
@@ -10051,6 +10075,31 @@ detect_enable_audio_device:
         	sys	_audio, 0102h
 		jc	short .sb16
 		mov	byte [audio_hardware], 2 ; AC97
+
+		;;;;
+		; 12/01/2025 (ref: playwav9.s, 18/12/2024)
+		sys	_audio, 0E00h ; get audio controller info
+		; EAX = IRQ Number in AL
+		;	Audio Device Number in AH 
+		; EBX = DEV/VENDOR ID
+		;       (DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV)
+		; ECX = BUS/DEV/FN 
+		;       (00000000BBBBBBBBDDDDDFFF00000000)
+		; EDX = NABMBAR/NAMBAR (for AC97)
+		;      (Low word, DX = NAMBAR address)
+		; EDX = Base IO Addr (DX) for SB16 & VT8233
+
+		mov	[dev_vendor], ebx
+		mov	[bus_dev_fn], ecx
+
+        	mov     [NAMBAR], dx	; save audio mixer base addr
+		;shr	edx, 16
+        	;mov    [NABMBAR], dx	; save bus master base addr
+		mov	dword [NAMBAR], edx
+
+		mov	[ac97_int_ln_reg], al
+		;;;;
+		
 		; TRDOS 386 system call
 		; sysaudio
 		; Get AC'97 Codec info
@@ -10073,6 +10122,15 @@ detect_enable_audio_device:
 		; 10/01/2025
 		;;mov	byte [blocks], 7
 		;dec	byte [blocks]
+
+		;;;;
+		; 12/01/2025 (ref: sb16play.s, 20/12/2024)
+		sys	_audio, 0E00h ; get audio controller info
+	
+		mov	[audio_io_base], edx
+		mov	[audio_intr], al
+		;;;;
+
 		retn
 .vt8233:
 		; check VIA VT3237R (VT8233) hardware at third
@@ -10107,12 +10165,13 @@ txt_audio_nf_err: db 'Proper audio hardware not found!',0Dh,0Ah,0
 
 		; 21/10/2024
 MP3_MAX_OUTPUT_SIZE equ 2*2*18*32*2
-    ; = 1200h = 4608 decimal = 2 channels, 2 granules, 18*32, 2 byte(16bit)
+    ; = 1200h = 4608 decimal = 2 channels, 2 granules, 18*32, 2 byte (16bit)
 
 
 ; =============== S U B R O U T I N E =======================================
 
 
+		; 12/01/2025
 audio_system_init:
 		;mov	eax, sample_buffer_size
 		; 10/01/2025
@@ -10182,14 +10241,14 @@ audio_system_init:
 		; bl = 01h -> CallBack method
 		; edx = Callback service address (virtual)
 		; ecx = 0 ; CL = srb value ; not used
-		;sys	_audio, 0301h, 0, audio_callback
+		sys	_audio, 0301h, 0, audio_callback
 		; 12/01/2025
 		; SRB method (faster than callback method)
 		; bl = 0 -> Signal Response Byte method
 		; cl = 1 -> SRB set value 
 		;     (will be set by audio IRQ service of the kernel)
 		; edx = SRB address -one byte data-
-		sys	_audio, 0300h, 1, srb	
+		;sys	_audio, 0300h, 1, srb	
 		jc	short .init_err
 		retn
 .init_err:
@@ -10203,8 +10262,6 @@ txt_audio_init_err: db 'Audio hardware initialization error!',0Dh,0Ah,0
 
 ; =============== S U B R O U T I N E =======================================
 
-; 12/01/2025
-%if 0
 		; 21/10/2024
 audio_callback:
 		; Operating system has directed CPU here because of
@@ -10215,24 +10272,30 @@ audio_callback:
 
 		mov	byte [srb], 1
 
+		; 12/01/2025
+                call	try_enqueue_all_blocks
+
 		sys	_rele ; return from callback service 
 		
 		; we must not come here !
 		mov	ebx, -1
 		sys	_exit
 		;jmp	short audio_callback
-%endif
+
 
 ; =============== S U B R O U T I N E =======================================
 
+		; 12/01/2025
 		; 10/01/2025
 		; 21/10/2024
 mp3_cast_to_speaker:
+                ; 12/01/2025
 		;call	try_enqueue_all_blocks
-
+	
+		; 12/01/2025
 		;cmp	dword [bytes_left],0
 		;jz	short .playback
-
+		
 		; 12/01/2025
 		; (here audio buffer -sample_buffer- is empty)
 		; (clear dma half buffer 1)
@@ -10246,6 +10309,7 @@ mp3_cast_to_speaker:
 		; bl = 0  : then switch to the next (second) half buffer
 		sys	_audio, 1000h
 
+		; 12/01/2025
 		; 22/10/2024
 		;call	try_enqueue_all_blocks
 .playback:
@@ -10286,7 +10350,6 @@ mp3_cast_to_speaker:
 		xor	eax, eax
 		cmp	[bytes_left], eax ; 0
 		jnz	short .playback_next
-.pb@@@:
 		; 22/10/2024
 		cmp	byte [num_enqueued_frames], al ; 0
                 jz	short .playback_end
@@ -10296,9 +10359,22 @@ mp3_cast_to_speaker:
 		jb	short .getchar
 		;mov	byte [srb], 0	; reset
 		mov	[srb], al ; 0
-		call	try_enqueue_all_blocks
+		; 12/01/2025
+		;call	try_enqueue_all_blocks
+		;;; 10/01/2025
+		mov	al, [half_buffer]
+		xor	byte [half_buffer], 1
+		add	al, '1'
+		mov	ah, 4Eh
+		mov	[0B8000h], ax 
+		;;;	
 		jmp	short .playback_lop
 .playback_end:
+		;;; 10/01/2025
+		mov	ax, 4E30h
+		mov	[0B8000h], ax 
+		;;;
+
 		; TRDOS 386 system call
 		; sysaudio
 		; Stop playing
@@ -10315,16 +10391,9 @@ mp3_cast_to_speaker:
 		; TRDOS 386 system call
 		; sysstdio
 		; BL = 1 -> read a character on stdin (no wait)
-		;sys	_stdio, 1
-		;and	eax, eax
-		;jz	short .playback_next
-
-		; 11/01/2025
-		mov	ah, 1
-		int	32h	;  (TRDOS 386 keyboard interrupt)
+		sys	_stdio, 1
+		and	eax, eax
 		jz	short .playback_next
-		xor	ah, ah
-		int	32h	; (TRDOS 386 keyboard interrupt)
 
 		cmp	al, '+' ; increase sound volume
 		je	short .inc_volume
@@ -10340,7 +10409,12 @@ mp3_cast_to_speaker:
 		cmp	al, 03h	; CTRL+C
 		je	short .playback_end
 		;;;
-		; 13/01/2025
+		; 12/01/2025
+		and	al, 0DFh
+		cmp	al, 'H'
+		je	short .hw_info
+		cmp	al, 'B'
+		je	short .b_info
 		jmp	.playback_next
 
 .inc_volume:
@@ -10366,23 +10440,30 @@ mp3_cast_to_speaker:
 		dec	cl
 		jmp	short .chg_volume
 
+		; 12/01/2025
+.hw_info:
+		call	write_audio_dev_info
+		jmp	.playback_next
+		; 12/01/2025
+.b_info:
+		call	write_buffer_size
+		jmp	.playback_next
+
 
 ; =============== S U B R O U T I N E =======================================
 
+		; 12/01/2025
 		; 09/01/2025
 		; 21/10/2024
 try_enqueue_all_blocks:
-		mov	edi, sample_buffer
 		; 12/01/2025
-		;mov	edi, decoding_buffer
-		; 11/01/2025
-		;cmp	dword [bytes_left], 0
-		;jna	short .enqueue_done
+		pusha	 	
+ 		mov	edi, sample_buffer
 		; 10/01/2025
 		jmp	short .first_block
 .next_block:
-		cmp	dword [bytes_left], 0
-		jle	short .enqueue_done
+                cmp	dword [bytes_left], 0
+                jle	short .enqueue_done
 		;
 		mov	edi, [mp3_samples_dst]
 		add	edi, [mp3_samples_output_size]
@@ -10394,27 +10475,301 @@ try_enqueue_all_blocks:
 		call	mp3_decode_frame
 		;popa
 		jc	short .enqueue_done
-
 		mov	eax, [mp3_src_frame_size]
 		cmp	eax, 0
- 		jz	short .enqueue_done
+		jz	short .enqueue_done
 		add	[stream_pos], eax
 		sub	[bytes_left], eax
-
 		mov	eax, [mp3_samples_output_size]
 		cmp	eax, 0
 		jz	short .next_block
 .no_error:
 		inc	byte [num_enqueued_frames]
-		
 		mov	al, [num_enqueued_frames]
 		cmp	al, [blocks]
 		jb	short .next_block
+.rtn:
+		; 12/01/2025
+		popa
 		retn
 .enqueue_done:
-		mov	dword [bytes_left], 0
-		retn
+                mov	dword [bytes_left], 0
+		; 12/01/2025
+		jmp	short .rtn
 
+
+; ---------------------------------------------------------------------------
+; 12/01/2025- Hardware Info display/write procedures.
+; ---------------------------------------------------------------------------
+; ref: playwav9.s (18/12/2024) - sb16play.s (20/12/2024)
+
+	; 12/01/2025
+write_audio_dev_info:
+	cmp	byte [audio_hardware], 2
+	jb	short write_sb16_dev_info  ; SB16
+	je	short write_ac97_pci_dev_info ; AC97
+	retn
+
+	; 20/12/2024 (playwavx.s, sb16play.s)
+write_sb16_dev_info:
+	; 27/11/2024
+	; 24/11/2024 (sb16play.asm)
+
+	mov	eax, [audio_io_base]
+	xor	ebx, ebx
+	mov	bl, al
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgBasePort+2], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgBasePort+1], al
+	mov	bl, ah
+	;and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgBasePort], al
+
+	;xor	eax, eax
+	; 27/11/2024
+	mov	al, [audio_intr]
+	;mov	cl, 10
+	;div	cl
+	;add	ah, 30h
+	;mov	[msgIRQnum], ah
+	; 25/11/2024
+	add	al, 30h
+	mov	[msgIRQnum], al	; 12/01/2025
+
+	; 12/01/2025	
+	; 20/12/2024
+	sys	_msg, msgSB16Info, 255, 07h
+
+	retn
+	
+write_ac97_pci_dev_info:
+	; 19/11/2024
+	; 30/05/2024
+	; 06/06/2017
+	; 03/06/2017
+	; BUS/DEV/FN
+	;	00000000BBBBBBBBDDDDDFFF00000000
+	; DEV/VENDOR
+	;	DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV
+
+	mov	eax, [dev_vendor]
+	xor	ebx, ebx
+	mov	bl, al
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgVendorId+3], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgVendorId+2], al
+	mov	bl, ah
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgVendorId+1], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgVendorId], al
+	shr	eax, 16
+	mov	bl, al
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgDevId+3], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgDevId+2], al
+	mov	bl, ah
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgDevId+1], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgDevId], al
+
+	mov	eax, [bus_dev_fn]
+	shr	eax, 8
+	mov	bl, al
+	mov	dl, bl
+	and	bl, 7 ; bit 0,1,2
+	mov	al, [ebx+hex_chars]
+	mov	[msgFncNo+1], al
+	mov	bl, dl
+	shr	bl, 3
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgDevNo+1], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgDevNo], al
+	mov	bl, ah
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgBusNo+1], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgBusNo], al
+
+	;mov	ax, [ac97_NamBar]
+	mov	ax, [NAMBAR]
+	mov	bl, al
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgNamBar+3], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgNamBar+2], al
+	mov	bl, ah
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgNamBar+1], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgNamBar], al
+
+	;mov	ax, [ac97_NabmBar]
+	mov	ax, [NABMBAR]
+	mov	bl, al
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgNabmBar+3], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgNabmBar+2], al
+	mov	bl, ah
+	mov	dl, bl
+	and	bl, 0Fh
+	mov	al, [ebx+hex_chars]
+	mov	[msgNabmBar+1], al
+	mov	bl, dl
+	shr	bl, 4
+	mov	al, [ebx+hex_chars]
+	mov	[msgNabmBar], al
+
+	xor	eax, eax
+	mov	al, [ac97_int_ln_reg]
+	mov	cl, 10
+	div	cl
+	; 23/11/2024
+	;add	[msgIRQ], ax
+	add	ax, 3030h
+	mov	[msgIRQ], ax
+	;and	al, al
+	cmp	al, 30h
+	jnz	short _w_ac97imsg_
+	mov	al, byte [msgIRQ+1]
+	mov	ah, ' '
+	mov	[msgIRQ], ax
+_w_ac97imsg_:
+	; 12/01/2025
+	; 01/12/2024
+	sys	_msg, msgAC97Info, 255, 07h
+
+	; 19/11/2024
+        ;retn
+
+	; 30/05/2024
+write_VRA_info:
+	; 12/01/2025
+	; 01/12/2024
+	sys	_msg, msgVRAheader, 255, 07h
+	cmp	byte [vra], 0
+	jna	short _w_VRAi_no
+_w_VRAi_yes:
+	sys	_msg, msgVRAyes, 255, 07h
+	retn
+_w_VRAi_no:
+	sys	_msg, msgVRAno, 255, 07h
+
+	retn
+
+; ---------------------------------------------------------------------------
+
+	; 12/01/2025
+write_buffer_size:
+	;;;	
+	mov	al, [blocks]	; (must be less than 10) 
+	add	al, '0'
+	mov	byte [blocks_txt], al
+	;;;
+	mov	edx, buffersize_txt
+	call	wrstr_edx
+	mov	eax, [buffer_size]	
+	call	wr_decimal_eax_with_thousands_seperator
+	mov	edx, bytes_txt
+	call	wrstr_edx
+	retn
+
+; 11/01/2025
+buffersize_txt	db 0Dh, 0Ah
+		db 'Buffer Size: ', 0
+; 12/01/2025
+;bytes_txt:	db ' bytes ', 0Dh, 0Ah, 0
+bytes_txt:	db ' bytes ('
+blocks_txt	db '0 blocks) ', 0Dh, 0Ah, 0
+
+; ---------------------------------------------------------------------------
+
+; 19/11/2024
+; 03/06/2017
+hex_chars	db "0123456789ABCDEF", 0
+msgAC97Info	db 0Dh, 0Ah
+		db " AC97 Audio Controller & Codec Info", 0Dh, 0Ah
+		db " Vendor ID: "
+msgVendorId	db "0000h Device ID: "
+msgDevId	db "0000h", 0Dh, 0Ah
+		db " Bus: "
+msgBusNo	db "00h Device: "
+msgDevNo	db "00h Function: "
+msgFncNo	db "00h"
+		db 0Dh, 0Ah
+		db " NAMBAR: "
+msgNamBar	db "0000h  "
+		db "NABMBAR: "
+msgNabmBar	db "0000h  IRQ: "
+msgIRQ		dw 3030h
+		db 0Dh, 0Ah, 0
+; 25/11/2023
+msgVRAheader	db " VRA support: "
+		db 0	
+msgVRAyes	db "YES", 0Dh, 0Ah, 0
+msgVRAno	db "NO ", 0Dh, 0Ah
+		; 12/01/2025
+		;db " (Interpolated sample rate playing method)"
+		db 0
+		;db 0Dh, 0Ah, 0
+
+; ----------------------------------
+
+; 24/11/2024
+msgSB16Info	db 0Dh, 0Ah
+		db " Audio Hardware: Sound Blaster 16", 0Dh, 0Ah 
+		db "      Base Port: "
+msgBasePort	db "000h", 0Dh, 0Ah 
+		db "            IRQ: "
+msgIRQnum	db 30h		; 12/01/2025
+		db 0Dh, 0Ah, 0
 
 ; ===========================================================================
 ; end of TRDOS 386 specific procedures.
@@ -10424,66 +10779,66 @@ try_enqueue_all_blocks:
 ; Initialized DATA
 ; ===========================================================================
 
-option_test     db 0                   
-option_mono     db 0                   
-option_8bit     db 0                   
-option_rate_shift db 0                 
-option_fast     db 0                   
+option_test     db 0
+option_mono     db 0
+option_8bit     db 0
+option_rate_shift db 0
+option_fast     db 0
                 align 4
-cpuid_flags     dd 0                   
-cpuid_exists    db 0                   
-detected_cpu    db 0                   
+cpuid_flags     dd 0
+cpuid_exists    db 0
+detected_cpu    db 0
                 align 4
-mp3_output_milliseconds dd 0           
+mp3_output_milliseconds dd 0
 millisecond_count dd 0
 
-; 20/10/2024                 
+; 20/10/2024
 ; HANDLE hProcess
-;hProcess       dd 0                   
+;hProcess       dd 0
 ; HANDLE hThread
-;hThread        dd 0                   
+;hThread        dd 0
 ; DWORD dwPriorityClass
-;dwPriorityClass dd 0                   
+;dwPriorityClass dd 0
 ; int nPriority
 ;nPriority      dd 0
                    
-ttt             dd 2 dup(0)            
+ttt             dd 2 dup(0)
 rdtsc_read_header db 'read header    ',0
 rdtsc_read_header_extra dd  0, 0       
                 db 'read extra     ',0
-rdtsc_read_granule dd 0, 0             
+rdtsc_read_granule dd 0, 0
                 db 'read granule   ',0
-rdtsc_append_main dd 2 dup(0)          
+rdtsc_append_main dd 2 dup(0)
                 db 'append main    ',0
-rdtsc_read_scalefac dd 2 dup(0)        
+rdtsc_read_scalefac dd 2 dup(0)
                 db 'read scalefac  ',0
-rdtsc_xlat_scalefac dd 2 dup(0)        
+rdtsc_xlat_scalefac dd 2 dup(0)
                 db 'xlat scalefac  ',0
-rdtsc_read_huffman dd 2 dup(0)         
+rdtsc_read_huffman dd 2 dup(0)
                 db 'read huffman   ',0
-rdtsc_ms_stereo dd 2 dup(0)            
+rdtsc_ms_stereo dd 2 dup(0)
                 db 'ms stereo      ',0
-rdtsc_i_stereo  dd 2 dup(0)            
+rdtsc_i_stereo  dd 2 dup(0)
                 db 'i stereo       ',0
-rdtsc_reorder   dd 2 dup(0)            
+rdtsc_reorder   dd 2 dup(0)
                 db 'reorder        ',0
-rdtsc_antialias dd 2 dup(0)            
+rdtsc_antialias dd 2 dup(0)
                 db 'antialias      ',0
-rdtsc_imdct     dd 2 dup(0)            
+rdtsc_imdct     dd 2 dup(0)
                 db 'imdct          ',0
-rdtsc_imdct36   dd 2 dup(0)            
+rdtsc_imdct36   dd 2 dup(0)
                 db ' imdct36       ',0
-rdtsc_imdct12   dd 2 dup(0)            
+rdtsc_imdct12   dd 2 dup(0)
                 db ' imdct12       ',0
-rdtsc_imdct0    dd 2 dup(0)            
+rdtsc_imdct0    dd 2 dup(0)
                 db ' imdct0        ',0
-rdtsc_synth_dct dd 2 dup(0)            
+rdtsc_synth_dct dd 2 dup(0)
                 db 'synth/dct      ',0
-rdtsc_dct32     dd 2 dup(0)            
+rdtsc_dct32     dd 2 dup(0)
                 db ' synth.dct32   ',0
-rdtsc_synth     dd 2 dup(0)            
+rdtsc_synth     dd 2 dup(0)
                 db ' synth.output  ',0
-rdtsc_total     dd 2 dup(0)            
+rdtsc_total     dd 2 dup(0)
                 db 'total          ',0
 mp3_bitrate_tab dw  0,32,40,48,56,64,80,96,112,128,160,192,224,256,320, 0
                 dw  0, 8,16,24,32,40,48,56,64,80,96,112,128,144,160, 0
@@ -11065,15 +11420,17 @@ _@@txt_verify2  db ', average difference = ',0
 ; Erdogan Tan - 17/10/2024
                ;db 'NOCASH MP3 PLAYER v1.4 for Windows ',0
 txt_ctrlc       db '(press CTRL+C to quit)', 13,10,0
-txt_ctrlc_size equ $ - txt_ctrlc
+txt_ctrlc_size = $ - txt_ctrlc
 txt_about       db 13,10
                 ;db '----------------------------------',13,10
                 db '-----------------------------------',13,10
-                db 'Erdogan Tan - 13/01/2025 (Assembler: NASM)', 13,10
+                db 'Erdogan Tan - 13/01/2025 (Assembler: FASM)', 13,10
                 db 'Original code: MP3PLAYER.EXE v1.4 (20/09/2024)', 13,10
                 db '               by Martin Korth (TASM source code)'
                 db 13,10,13,10,0
-                db 'v1.4.0',0
+                db 'v1.4.0'
+; 10/01/2025
+half_buffer	db 0
 
 ; ===========================================================================
 ; Uninitialized DATA (BSS)
@@ -11084,201 +11441,216 @@ align 4
 bss_start:
 
 ; 10/01/2025
-ABSOLUTE bss_start
+;ABSOLUTE bss_start
 
-alignb 4
-		resw 1	; 09/01/2025
+; 12/01/2025
+;;;;
+; AC97 specific
+bus_dev_fn	rd 1
+dev_vendor	rd 1
+NAMBAR		rw 1
+NABMBAR		rw 1
+; SB16 specific
+audio_io_base	rd 1
+ac97_int_ln_reg:
+audio_intr	rb 1
+;;;;
+
+align 4
+
 ;;;
 ; 20/10/2024 (TRDOS 386 specific parameters)
-audio_hardware	resb 1
-vra		resb 1
-max_frequency	resw 1
-srb		resb 1
-volume_level	resb 1
-blocks		resb 1
-		resb 1
-buffer_size	resd 1
+audio_hardware	rb 1
+vra		rb 1
+max_frequency	rw 1
+srb		rb 1
+volume_level	rb 1
+blocks		rb 1
+		rb 1
+buffer_size	rd 1
 ;;;	
 
 mp3_context_start:
-main_data_pool_start	resb 4096
-main_data_pool_wr_ptr	resd 1
-mp3_src_data_location	resd 1
-mp3_src_frame_size	resd 1
-mp3_src_frame_end	resd 1
-mp3_hdr_32bit_header	resd 1
-mp3_hdr_flag_crc	resd 1
-mp3_hdr_flag_mpeg25	resd 1
-mp3_hdr_flag_padding	resd 1
-mp3_sample_rate		resd 1
-mp3_hdr_sample_rate_index resd 1
-mp3_bit_rate		resd 1
-mp3_src_num_channels	resd 1
-mp3_output_num_channels resd 1
-mp3_output_sample_rate	resd 1
-mp3_bytes_per_sample	resd 1
-mp3_curr_syn_index	resd 1
-mp3_curr_syn_dst	resd 1
-mp3_nb_frames		resd 1
-mp3_hdr_mode_val	resd 1
-mp3_hdr_mode_ext	resd 1
-mp3_hdr_flag_lsf	resd 1
-mp3_synth_filter_proc	resd 1
+main_data_pool_start	rb 4096
+main_data_pool_wr_ptr	rd 1
+mp3_src_data_location	rd 1
+mp3_src_frame_size	rd 1
+mp3_src_frame_end	rd 1
+mp3_hdr_32bit_header	rd 1
+mp3_hdr_flag_crc	rd 1
+mp3_hdr_flag_mpeg25	rd 1
+mp3_hdr_flag_padding	rd 1
+mp3_sample_rate		rd 1
+mp3_hdr_sample_rate_index rd 1
+mp3_bit_rate		rd 1
+mp3_src_num_channels	rd 1
+mp3_output_num_channels rd 1
+mp3_output_sample_rate	rd 1
+mp3_bytes_per_sample	rd 1
+mp3_curr_syn_index	rd 1
+mp3_curr_syn_dst	rd 1
+mp3_nb_frames		rd 1
+mp3_hdr_mode_val	rd 1
+mp3_hdr_mode_ext	rd 1
+mp3_hdr_flag_lsf	rd 1
+mp3_synth_filter_proc	rd 1
 
-mp3_synth_buf   resd 2048
-mp3_synth_index resd 2
-mp3_sb_samples  resd 2304
+mp3_synth_buf   rd 2048
+mp3_synth_index rd 2
+mp3_sb_samples  rd 2304
 	                           ; MP3_MAX_CHANNELS*36*SBLIMIT
-mp3_mdct_buf    resd 1152
+mp3_mdct_buf    rd 1152
                                    ; MP3_MAX_CHANNELS*SBLIMIT*18
-mp3_free_format_frame_size resd 1
+mp3_free_format_frame_size rd 1
 
-mp3_curr_vfrac_bits resb 1
+mp3_curr_vfrac_bits rb 1
 
-alignb 4
+align 4
 
-mp3_xing_id     resd 1
-mp3_xing_flags  resd 1
-mp3_xing_frames resd 1
-mp3_xing_filesize resd 1
-mp3_xing_toc    resb 100
-mp3_xing_vbr_scale resd 1
-mp3_file_size   resd 1
-mp3_id3_size    resd 1
-mp3_tag_size    resd 1
+mp3_xing_id     rd 1
+mp3_xing_flags  rd 1
+mp3_xing_frames rd 1
+mp3_xing_filesize rd 1
+mp3_xing_toc    rb 100
+mp3_xing_vbr_scale rd 1
+mp3_file_size   rd 1
+mp3_id3_size    rd 1
+mp3_tag_size    rd 1
 
-mp3_num_frames_decoded	resd 1
-mp3_total_output_size	resd 1
-mp3_samples_dst		resd 1
+mp3_num_frames_decoded	rd 1
+mp3_total_output_size	rd 1
+mp3_samples_dst		rd 1
 ; DWORD mp3_samples_output_size
-mp3_samples_output_size	resd 1
-mp3_samples_dst_step	resd 1
+mp3_samples_output_size	rd 1
+mp3_samples_dst_step	rd 1
 
-mp3_curr_channel	resd 1
-mp3_curr_granule	resd 1
-mp3_curr_frame		resd 1
+mp3_curr_channel	rd 1
+mp3_curr_granule	rd 1
+mp3_curr_frame		rd 1
 
-mp3_bitstream_start	resd 1
-mp3_src_remain		resd 1
-mp3_extra_bytes		resd 1
-mp3_main_data_begin	resd 1
-mp3_num_compress_bits	resd 1
+mp3_bitstream_start	rd 1
+mp3_src_remain		rd 1
+mp3_extra_bytes		rd 1
+mp3_main_data_begin	rd 1
+mp3_num_compress_bits	rd 1
 
-mp3_nb_granules resd 1
+mp3_nb_granules rd 1
 
-mp3_granules		resb 9856
-mp3_exponents		resw 576
-huff_tree_buf		resb 0B800h
-mp3_band_index_long	resw 288
-mp3_table_4_3_exp	resb 32828
+mp3_granules		rb 9856
+mp3_exponents		rw 576
+huff_tree_buf		rb 0B800h
+mp3_band_index_long	rw 288
+mp3_table_4_3_exp	rb 32828
 
-mp3_table_4_3_value	resd 32828
-mp3_exp_table		resd 512
-mp3_expval_table	resd 8192
-mp3_mdct_win		resd 288
-mp3_is_table_lsf	resd 512
-mp3_synth_win		resd 1024
-mp3_lsf_sf_expand_exploded_table resb 8192
+mp3_table_4_3_value	rd 32828
+mp3_exp_table		rd 512
+mp3_expval_table	rd 8192
+mp3_mdct_win		rd 288
+mp3_is_table_lsf	rd 512
+mp3_synth_win		rd 1024
+mp3_lsf_sf_expand_exploded_table rb 8192
 mp3_context_end:
-_@@region_address0	resd 1
-_@@region_address1	resd 1
-_@@saved_sp		resd 1
-mp3_main_data_siz	resd 1
-_@@scfsi        resd 1
-_@@gains        resd 3
-_@@rle_point    resd 1
-_@@III          resd 1
-_@@JJJ          resd 1
-_@@linbits      resd 1
-_@@vlc_table    resd 1
-_@@coarse_end   resd 1
+_@@region_address0	rd 1
+_@@region_address1	rd 1
+_@@saved_sp		rd 1
+mp3_main_data_siz	rd 1
+_@@scfsi        rd 1
+_@@gains        rd 3
+_@@rle_point    rd 1
+_@@III          rd 1
+_@@JJJ          rd 1
+_@@linbits      rd 1
+_@@vlc_table    rd 1
+_@@coarse_end   rd 1
 
-_@rle_point     resd 1
-_@@rle_ptr      resd 1
-_@@rle_val      resd 1
-_@@rle_val_x_40h resd 1
-_@@max_bands    resb 4
-_@@max_blocks   resd 1
-_@@max_pos      resd 1
-_@@sfb_array    resb 40
-_@@is_tab       resd 1
-_@@n_long_sfb   resd 1
-_@@n_short_sfb  resd 1
-_@@n_sfb        resd 1
-_@@tmp          resb 2304
-_@@s0           resd 1
-_@@s2           resd 1
-_@@s3           resd 1
+_@rle_point     rd 1
+_@@rle_ptr      rd 1
+_@@rle_val      rd 1
+_@@rle_val_x_40h rd 1
+_@@max_bands    rb 4
+_@@max_blocks   rd 1
+_@@max_pos      rd 1
+_@@sfb_array    rb 40
+_@@is_tab       rd 1
+_@@n_long_sfb   rd 1
+_@@n_short_sfb  rd 1
+_@@n_sfb        rd 1
+_@@tmp          rb 2304
+_@@s0           rd 1
+_@@s2           rd 1
+_@@s3           rd 1
 
-_@@@tmp         resd 18 ; resb 72
-_@@tmp0         resd 1
-_@@tmp1         resd 1
-_@@tmp2         resd 1
-_@@tmp3         resd 1
-_@@tmp4         resd 1
-_@@tmp5         resd 1
-mp3_out2_a0     resd 1
-mp3_out2_a1     resd 1
-mp3_out2_a2     resd 1
-mp3_out2_b0     resd 1
-mp3_out2_b1     resd 1
-mp3_out2_b2     resd 1
-                resd 1
-                resd 1
-_@@@JJJ         resd 1
-_@@www          resd 1
-_@@mdct_long_end resd 1
-_@@sblimit      resd 1
-_@@switch_point resd 1
-mp3_huff_tmp_bits	resb 256
-mp3_huff_tmp_codes	resb 512
-_@@table_nb_bits	resd 1
-_@@nb_codes		resd 1
-_@@prefix_numbits	resd 1
-_@@prefix_pattern	resd 1
-_@@curr_table_size	resd 1
-_@@curr_table_mask	resd 1
-_@@curr_table_index	resd 1
-_@@granule_addr		resd 1
+_@@@tmp         rd 18 ; rb 72
+_@@tmp0         rd 1
+_@@tmp1         rd 1
+_@@tmp2         rd 1
+_@@tmp3         rd 1
+_@@tmp4         rd 1
+_@@tmp5         rd 1
+mp3_out2_a0     rd 1
+mp3_out2_a1     rd 1
+mp3_out2_a2     rd 1
+mp3_out2_b0     rd 1
+mp3_out2_b1     rd 1
+mp3_out2_b2     rd 1
+                rd 1
+                rd 1
+_@@@JJJ         rd 1
+_@@www          rd 1
+_@@mdct_long_end rd 1
+_@@sblimit      rd 1
+_@@switch_point rd 1
+mp3_huff_tmp_bits	rb 256
+mp3_huff_tmp_codes	rb 512
+_@@table_nb_bits	rd 1
+_@@nb_codes		rd 1
+_@@prefix_numbits	rd 1
+_@@prefix_pattern	rd 1
+_@@curr_table_size	rd 1
+_@@curr_table_mask	rd 1
+_@@curr_table_index	rd 1
+_@@granule_addr		rd 1
 ; HANDLE hFile
-hFile           resd 1
+hFile           rd 1
 ; HANDLE hMap
-;hMap           resd 1
-stream_start    resd 1
-stream_pos      resd 1
-bytes_left      resd 1
+;hMap           rd 1
+stream_start    rd 1
+stream_pos      rd 1
+bytes_left      rd 1
 
 ; 20/10/2024
 ; DWORD diskresult
-;diskresult     resd 1
+;diskresult     rd 1
 ; HANDLE std_out
-;std_out        resd 1
-;cmdline_buf    resb 1024
-cmdline_buf	resb 128
+;std_out        rd 1
+;cmdline_buf    rb 1024
+cmdline_buf	rb 128
 ; HANDLE mp3_wav_handle
-mp3_wav_handle  resd 1
+mp3_wav_handle  rd 1
 ; HANDLE mp3_pcm_handle
-mp3_pcm_handle  resd 1
-_@@max_diff     resd 1
-_@@avg_diff     resd 2
-pcm_filepos     resd 1
-_@@mono_convert resd 1
-_@@pcm_steps    resw 2
-_@@worst_pcm_filepos resd 1
-_@@worst_mp3_filepos resd 1
-		resd 1
-;alignb 4
+mp3_pcm_handle  rd 1
+_@@max_diff     rd 1
+_@@avg_diff     rd 2
+pcm_filepos     rd 1
+_@@mono_convert rd 1
+_@@pcm_steps    rw 2
+_@@worst_pcm_filepos rd 1
+_@@worst_mp3_filepos rd 1
+		rd 1
+;align 4
 
 ; 10/01/2025
-alignb 4096
+align 4096
 
 ; 09/01/2025
-;sample_buffer  resb 36864
-;sample_buffer	resb 8*MP3_MAX_OUTPUT_SIZE
+;sample_buffer  rb 36864
+;sample_buffer	rb 8*MP3_MAX_OUTPUT_SIZE
 ;sample_buffer_size equ $-sample_buffer
 
 ; 10/01/2025
-sample_buffer	resb 65536 ; max. 64512 bytes ; 11/01/2025
+sample_buffer	rb 65536 ; max. 64512 bytes ; 11/01/2025
+
+;align 4096
 
 end_of_bss:
 
