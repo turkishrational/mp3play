@@ -41,9 +41,9 @@ As I have already got big/huge WAV file players (.COM files) for DOS and (.PRG f
        
 Erdogan Tan - 18/10/2024
 
-MP3PLAYER demo (youtube): https://youtu.be/kQc7F5pgiYs?si=6p9wkdjeV0P3MyMm (10/01/2025)
-                          <br>                        https://youtu.be/mxIush-jZuM?si=VdpPxVIHFEo1S5rc (24/01/2025)
-                          <br>                        https://youtu.be/GoGeS4ul2nw?si=AGkdpBMdqPIDhrGT (28/01/2025)
+MP3PLAYER demo (youtube): <br> https://youtu.be/kQc7F5pgiYs?si=6p9wkdjeV0P3MyMm (10/01/2025)
+                          <br> https://youtu.be/mxIush-jZuM?si=VdpPxVIHFEo1S5rc (24/01/2025)
+                          <br> https://youtu.be/GoGeS4ul2nw?si=AGkdpBMdqPIDhrGT (28/01/2025)
                                                    
 
 NOTE: Try TRDOS 386 MP3 PLAYERs which last modification date is shown as 12/01/2025 or later. You can test them via QEMU package in this repository.
