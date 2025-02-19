@@ -1,14 +1,14 @@
 ; ****************************************************************************
-; MP3PLAY5.PRG - MP3 DECODER/PLAYER 1.0 for TRDOS 386 Operating System
+; TMP3PLAY.PRG - Tiny MP3 PLAYER v1.0 for TRDOS 386 Operating System
 ; ----------------------------------------------------------------------------
 ; Based on 
 ; NOCASH MP3PLAY.EXE 1.4 (Windows) ASM source code (Martin Korth, 20/09/2024)
 ;
-; 12/02/2025
+; 15/02/2025
 ;
-; [ Last Modification: 14/02/2025 ]
+; [ Last Modification: 18/02/2025 ]
 ;
-; Modified from 'mp3play5.s' (01/02/2025) and 'cgaplay.s' (05/02/2025)
+; Modified from 'mp3play6.s' (14/02/2025) and 'twavply3.s' (10/02/2025)
 ;
 ; ----------------------------------------------------------------------------
 ; Modified from on MP3PLAY.ASM (for Windows console) source code - 17/10/2024
@@ -27,13 +27,9 @@
 ; (This) modified MP3PLAY.EXE (v1.4.0, 17/10/2024) is 37888 bytes.
 ;
 ; ---------------------------------------------------------------------------
-; Assembler: FASM
-; ---------------
-; fasm mp3play.s MP3PLAY.PRG
-
-; 12/02/2025
-; Wave Lighting Graphics Code Reference:
-; cgaplay.s - 05/02/2025
+; Assembler: NASM (v2.15)
+; ------------------------------------------------
+; nasm tmp3play.s -l  tmp3play.txt -o TMP3PLAY.PRG
 
 ; 13/01/2025 (mp3play3.s)
 ; Interpolated sample rate playing method for non-VRA AC97 codecs.
@@ -94,40 +90,11 @@ _dma	equ 45
 _stdio  equ 46	;  TRDOS 386 v2.0.9
 
 ; ---------------------------------------------------------------------------
-; 'sys' macro in FASM format
-; ---------------------------------------------------------------------------
-
-; 11/01/2025
-if 1
-;%if 0
-macro sys op1,op2,op3,op4
-{
-    if op4 eq 
-    else
-        mov edx, op4
-    end if
-    if op3 eq
-    else
-        mov ecx, op3
-    end if
-    if op2 eq
-    else
-        mov ebx, op2
-    end if
-    mov eax, op1
-    int 40h
-}
-;%endif
-end if
-
-; ---------------------------------------------------------------------------
-; 'sys' macro in NASM format
+; 'sys' macro
 ; ---------------------------------------------------------------------------
 ; 09/01/2025
 
-; 11/01/2025
-if 0
-;%macro sys 1-4
+%macro sys 1-4
     ; 29/04/2016 - TRDOS 386 (TRDOS v2.0)
     ; 03/09/2015
     ; 13/04/2015
@@ -144,53 +111,163 @@ if 0
     mov eax, %1
     ;int 30h
     int 40h ; TRDOS 386 (TRDOS v2.0)
-;%endmacro
-end if
+%endmacro
 
 ; ===========================================================================
 ; CODE
 ; ===========================================================================
 
-		format binary
-                use32
-                ;org 0x0
+		[BITS 32] ; 32-bit intructions
+
+		[ORG 0]
 
 ; ===========================================================================
 
-		; 13/02/2025
+		; 15/02/2025
 start:
+		; 15/02/2025
+		sys	_msg, txt_hello, 255, 0Bh
+
 		; 21/10/2024
 		call	set_break	; set and clear bss section
 					; also set stream_start position
 
-                ;mov	edx, txt_hello  ; "nocash mp3 decoder v1.4, 2024" ...
-                ;call	wrstr_edx
-		mov	ebx, txt_hello
-		call	print_msg
-
-		call	get_commandline
-		;jc	.exit
-		; 26/01/2025
-		jc	ExitP@
+		; 15/02/2025
+		sys	_msg, txt_bdate, 255, 0Fh
+		sys	_msg, txt_original,255,07h
 
 		;;;
 		; 11/01/2025
 		call	detect_enable_audio_device
+		; 15/02/2025
+		jnc     short GetFileName
+_dev_not_ready:
+		; couldn't find the audio device!
+		sys	_msg, noDevMsg, 255, 0Fh
+		jmp     ExitP@
+
+		; ---------------------------------------------------
+
+		; 15/02/2025 - tmp3play.s
+		; 10/02/2025 - twavply3.s
+GetFileName:
+		; (TRDOS 386 -Retro UNIX 386- argument transfer method)
+		; (stack: argc,argv0addr,argv1addr,argv2addr ..
+		;			.. argv0text, argv1text ..) 
+		; ---- argc, argv[] ----
+		mov	esi, esp
+		lodsd
+		cmp	eax, 2 ; two arguments 
+		jnb	short _x
+		jmp	pmsg_usage
+
+_x:
+		lodsd	; skip program (PRG) file name
+		mov	esi, [esi] ; MP3 file name 
+
+		;mov	edi, wav_file_name
+		; 15/02/2025
+		mov	edi, mp3_file_name
+		xor	ecx, ecx ; 0
+ScanName:       
+		lodsb
+
+		cmp	al, 0Dh	; CR
+		jna	short a_4
+_y:
+		cmp	al, 20h
+		je	short ScanName	; scan start of name.
+		stosb
+		mov	ah, 0FFh
+a_0:	
+		inc	ah
+a_1:
+		inc	ecx
+		lodsb
+		stosb
+		cmp	al, '.'
+		je	short a_0
+		cmp	al, 20h
+		jna	short a_3
+		and	ah, ah
+		jz	short a_2
+
+		cmp	al, '\'
+		jne	short a_2
+		mov	ah, 0
+a_2:
+		cmp	cl, 75	; 64+8+'.'+3 -> offset 75 is the last chr
+		jb	short a_1
+		jmp	short a_4
+a_3:
+		dec	edi
+		or	ah, ah		; if period NOT found,
+		jnz	short a_4 	; then add a .mp3 extension.
+SetExt:
+		; 15/02/2025
+		mov	dword [edi], '.mp3'
+		;mov	dword [edi], '.WAV' ; ! 64+12 is DOS limit
+					    ;   but writing +4 must not
+					    ;   destroy the following data
+					; so, 80 bytes path + 0 is possible here
+		add	edi, 4
+a_4:	
+		mov	byte [edi], 0
+	
+		cmp	byte [mp3_file_name], 20h
+		ja	short mp3_filename_chk
+
+pmsg_usage: 
+		sys	_msg, txt_help, 255, 0Fh
+
+		jmp	ExitP@
+
+		; ---------------------------------------------------
+
+mp3_filename_chk:
+		mov	eax, [edi-4]
+		and	eax, 0FFDFDFFFh
+		cmp	eax, '.MP3'
+		jne	short not_valid_mp3
+
+		; ---------------------------------------------------
+		
+ 		xor	ebp, ebp
+		call	mp3_init
+		call	open_and_mmap_the_file
 		;jc	.exit
 		; 26/01/2025
 		jc	ExitP@
-		;;;
 
-                xor     ebp, ebp
-                call    mp3_init
-                call    open_and_mmap_the_file
-                ;jc     .exit
-		; 26/01/2025
-		jc      ExitP@
-
-		;;;;
 		; 13/02/2025
 		call	write_audio_dev_info
+		
+		; 15/02/2025
+		call	mp3_check_1st_frame
+		jnc	short mp3_file_ready
+
+not_valid_mp3:
+		; not a proper/valid mp3 file !
+		sys	_msg, not_valid_mp3f, 255, 0Ch
+
+		jmp	ExitP@
+
+		; ---------------------------------------------------
+
+mp3_file_ready:
+		; 13/02/2025
+		; 22/01/2025
+		; Forward/Backward position change parameters (*)
+		mov	eax, [stream_pos]
+		mov	[stream_begin], eax ; *
+		mov	eax, [bytes_left]
+		mov	[stream_size], eax ; *
+
+		; 15/02/2025
+		call	SetTotalTime
+
+		; 15/02/2025
+		call	write_mp3_file_info
 
 		sys	_msg, msgPressAKey, 255, 07h
 
@@ -204,38 +281,51 @@ start:
 		call	check4keyboardstop.p_4
 		jc	ExitP@
 
+		; ---------------------------------------------------
+
+		; 17/02/2025
+		;	[mp3_bytes_per_sample] = 2
+		; 15/02/2025 (tmp3play.s)
+		; 10/02/2025 (twavply3.s)
+		; 13/02/2025 (mp3play6.s)
+		; 26/01/2025 (mp3play5.s)
+		;;;;
+		mov	eax, 256
+		mov	dl, 1
+		cmp	byte [audio_hardware], dl ; 1
+		ja	short .stolp_s16 ; AC97
+
+		mov	edx, get_sb16_sound_data
+		; SB16		
+		cmp	byte [mp3_num_channels], dl ; 1
+		ja	short .stolp_s ; stereo
+.stolp_m:
+		;mov	ebx, sdc_8bit_mono
+		;cmp	byte [mp3_bytes_per_sample], dl ; 1
+		;jna	short .stolp_ok	; 8bit, mono
+		mov	ebx, sdc_16bit_mono
+		jmp	short .stolp_m16 ; 16bit, mono
+.stolp_s:
+		;mov	ebx, sdc_8bit_stereo
+		;cmp	byte [mp3_bytes_per_sample], dl ; 1
+		;jna	short .stolp_s8 ; 8bit, stereo
+		; 16bit, stereo
+		;mov	ebx, sdc_16bit_stereo
+.stolp_s16:
+		xor	ebx, ebx ; (not necessary)
+		mov	edx, get_ac97_sound_data ; (**)
+				; also for sb16, 16bit, stereo
+		shl	eax, 1
+.stolp_s8:
+.stolp_m16:
+		shl	eax, 1
+.stolp_ok:
+		mov	[sd_count], eax
+		mov	[sounddata_copy], ebx
+		mov	[get_sound_data], edx
 		;;;;
 
-                call    detect_cpu_386_and_up
-                call    GetTickCount
-                neg     eax
-                mov     [millisecond_count], eax
-
-		call	mp3_check_1st_frame
-		;jc	.exit
-		; 26/01/2025
-		jc      ExitP@
-
-                cmp     byte [option_test], 0
-                jz      short .no_benchmark_test
-                call    mp3_plain_test_without_output
-                jmp     .decode_done
-
-.no_benchmark_test:
-                cmp     dword [mp3_pcm_fname], 0
-                jz      short .no_pcm_verify
-                call    mp3_verify_pcm_file
-                ;jmp    .exit
-		; 26/01/2025
-		jmp     ExitP@
-
-.no_pcm_verify:
-                cmp     dword [mp3_dst_fname], 0
-                jz      short .no_wav_output
-                call    mp3_cast_to_wav_file
-                jmp     .decode_done
-
-.no_wav_output:
+		; 15/02/2025
 		; ---------------------------------------------------
 		
 		; 13/02/2025
@@ -251,94 +341,84 @@ start:
 		; 30/12/2024
 		jmp	trdos386_error
 .vimem_map_ok:
-		;; Set Video Mode to 13h
-		;sys	_video, 0813h
-		;cmp	eax, 14h 
-		;je	short .mode_13h_set_ok
+		;;;;
 
-		; set VGA mode by using int 31h
-		mov	ax, 13h	; mode 13h ; 
-		int	31h	; real mode: int 10h
-.mode_13h_set_ok:
-		; 13/02/2025
-		;mov	dword [graphstart], 0A0000h+(12*8*320)+(4*320)
-		GRAPHSTART equ 0A0000h+(12*8*320)+(4*320)
+		; ---------------------------------------------------
+setgraphmode:
+		; set VGA 640x480x16 graphics mode
+		mov	ax, 12h
+		int	31h	; TRDOS 386 Video Interrupt
+				; Set video mode
+		mov	dx, 3C0h
+		xor	al, al
+setgraphmodel0:
+		;out	dx, al
+		mov	ah, 1	; outb
+		int	34h	; TRDOS 386 IOCTL Interrupt
+		;out	dx, al
+		;mov	ah, 1	; outb
+		int	34h
+		inc	al
+		cmp	al, 10h
+		jb	short setgraphmodel0
+		mov	al, 20h
+		;out	dx, al
+		;mov	ah, 1	; outb
+		int	34h
+		;;;;
 
 		; ---------------------------------------------------
 
-		; 13/02/2025 (mp3play6.s)
-		; 26/01/2025 (mp3play5.s)
-		;;;;
-		mov	dl, 1
-		cmp	byte [audio_hardware], dl ; 1
-		ja	short .stolp_s16 ; AC97
-		; SB16		
-		cmp	byte [mp3_output_num_channels], dl ; 1
-		ja	short .stolp_s
-.stolp_m:
-		cmp	byte [mp3_bytes_per_sample], dl ; 1
-		ja	short .stolp_m16
-.stolp_m8:
-		mov	word [sd_count], 320
-		mov	dword [draw_wave_points], UpdateWavePoints_8m
-		jmp	short .stolp_ok
-.stolp_m16:
-		mov	word [sd_count], 320*2
-		mov	dword [draw_wave_points], UpdateWavePoints_16m
-		jmp	short .stolp_ok
-.stolp_s:
-		cmp	byte [mp3_bytes_per_sample], dl ; 1
-		ja	short .stolp_s16
-.stolp_s8:
-		mov	word [sd_count], 320*2
-		mov	dword [draw_wave_points], UpdateWavePoints_8s
-		jmp	short .stolp_ok
-.stolp_s16:
-		mov	word [sd_count], 320*4
-		mov	dword [draw_wave_points], UpdateWavePoints_16s
-.stolp_ok:
-		;;;;
+		; 17/02/2025
+		mov	ecx, 256
+		xor	ebx, ebx
+		mov	edi, RowOfs
+MakeOfs:
+		mov	eax, ebx
+		shl	eax, 7 ; * 128
+		mov	al, 80
+		mul	ah
+		stosw
+		inc	ebx
+		loop	MakeOfs
 
-		; 13/02/2025
-		; 22/01/2025
-		; Forward/Backward position change parameters (*)
-		mov	eax, [stream_pos]
-		mov	[stream_begin], eax ; *
-		mov	eax, [bytes_left]
-		mov	[stream_size], eax ; *
+		; ---------------------------------------------------
 
 		; 25/01/2025
 		; 21/12/2024
 		;;; ---------------------------
-		;call	clearscreen
 		call	drawplayingscreen
 		;;; ---------------------------
 
-		call	SetTotalTime
-		call	UpdateFileInfo
-
+		; 15/02/2025
 		mov	al, 3	; 0 = max, 31 = min
 		call	SetMasterVolume
-		
-		call	UpdateVolume
-
-		call	UpdateProgressBar
 
 		;;; ---------------------------
 
+		; 16/02/2025		
+replay:
+		; 17/02/2025
+		; 15/02/2025
 		; 13/01/2025 (interpolation procs for non-VRA AC97 codecs)
 		;;;; --------------------------
 		;mov	byte [interpolation], 0
-		mov	al, 2 
+		mov	al, 2
 		cmp	[audio_hardware], al ; 2
-		jne	short .direct
+		jb	short .direct ; SB16	; 17/02/2025
+		; AC97
+		;mov	dword [get_sound_data], get_ac97_sound_data ; (**)
 .chk_frq:
-		cmp	dword [mp3_output_sample_rate], 48000 ; 48 kHZ
+		cmp	dword [mp3_sample_rate], 48000 ; 48 kHZ
 		jb	short .chk_vra
-		cmp	byte [mp3_output_num_channels], 2
-		jb	short .convert	; mono (8bit or 16bit)
-		cmp	byte [mp3_bytes_per_sample], al ; 2
-		jnb	short .direct ; 16bit, stereo
+		cmp	byte [mp3_num_channels], 2
+		; 17/02/2025
+		;jb	short .convert	; mono (8bit or 16bit)
+		
+		;cmp	byte [mp3_bytes_per_sample], al ; 2
+		;jnb	short .direct ; 16bit, stereo
+		; 17/02/2025
+		jnb	short .direct
 .convert:
 		; 8bit m/s or 16bit mono
 		mov	byte [interpolation], 1 ; convert (to 16 bit stereo)
@@ -348,10 +428,11 @@ start:
 		cmp	byte [vra], 1
 		jb	short .indirect ; 21/01/2025
 		dec	byte [interpolation] ; 1 = convert (to 16 bit stereo)
-		cmp	byte [mp3_output_num_channels], 2
+		cmp	byte [mp3_num_channels], 2
 		jb	short .indirect ; 8 bit ; 21/01/2025
-		cmp	byte [mp3_bytes_per_sample], al ; 2
-		jb	short .indirect ; mono ; 21/01/2025	
+		; 17/02/2025
+		;cmp	byte [mp3_bytes_per_sample], al ; 2
+		;jb	short .indirect ; mono ; 21/01/2025	
 
 		; 14/01/2025
 		dec	byte [interpolation] ; 0
@@ -369,11 +450,9 @@ start:
 
                 call	mp3_cast_to_speaker
 
+		; 15/02/2025
 		; 13/01/2025
-		;;;; --------------------------
-		;jmp	short .decode_done
-		; 22/01/2025
-		jmp	short .decode_done@
+		jmp	short .decode_done
 
 		; 15/01/2025
 .exit@:
@@ -389,60 +468,14 @@ start:
 		call	mp3_cast_to_speaker_x
 		;;;; --------------------------
 
+		; 15/02/2025
 		; 22/01/2025
-.decode_done@:
+.decode_done:
 		; set video mode to 03h again (clear screen)
 		;mov	ax, 03h
 		;int	31h ; TRDOS 386 - Video interrupt
 		; 25/01/2025
 		call	set_text_mode
-.decode_done:
-                call    GetTickCount
-                add     [millisecond_count], eax
-                mov     edx, txt_decode_timing1 ; "audio duration "
-                call    wrstr_edx
-                mov     eax, [mp3_total_output_size]
-                mov     edx, 1000
-                mul     edx
-                div     dword [mp3_output_sample_rate]
-                xor     edx, edx
-                div     dword [mp3_output_num_channels]
-                xor     edx, edx
-                div     dword [mp3_bytes_per_sample]
-                mov     [mp3_output_milliseconds], eax
-                call    wr_decimal_eax_with_thousands_seperator
-                mov     edx, txt_decode_timing2 ; " milliseconds, decoded in "
-                call    wrstr_edx
-                mov     eax, [millisecond_count]
-                call    wr_decimal_eax_with_thousands_seperator
-                mov     edx, txt_decode_timing3 ; " milliseconds\r\n"
-                call    wrstr_edx
-                mov     edx, txt_clks_per_second ; " clock cycles per second:\r\n"
-                call    wrstr_edx
-                mov     esi, ttt ; rdtsc_list_start
-
-.timelog_lop:
-                call    wrspc
-                lea     edx, [esi+8]
-                call    wrstr_edx
-                call    wrspc
-                mov     eax, [esi]
-                mov     ebx, [esi+4]
-                mov     edx, 1000
-                imul    ebx, edx
-                mul     edx
-                add     edx, ebx
-                cmp     edx, [mp3_output_milliseconds]
-                jnb     short .timelog_oops
-                div     dword [mp3_output_milliseconds]
-                call    wr_decimal_eax_with_thousands_seperator
-
-.timelog_oops:
-                call    wrcrlf
-                add     esi, 24
-                cmp     esi, mp3_bitrate_tab
-                jnz     short .timelog_lop
-
 .exit:
 		;push   0               ; uExitCode
                 ;call   ExitProcess
@@ -457,60 +490,6 @@ trdos386_error:
 		mov	ebx, -1	; (not necessary) -error exit example-
 		jmp	ExitProcess@
 
-
-; =============== S U B R O U T I N E =======================================
-
-
-detect_cpu_386_and_up:
-                mov     byte [detected_cpu], 3
-                mov     ebx, esp
-		;and	esp, ~3
-		; 11/01/2025
-                and     esp, not 3
-                pushf
-                pop     eax
-                mov     ecx, eax
-                xor     eax, 40000h
-                push    eax
-                popf
-                pushf
-                pop     eax
-                xor     eax, ecx
-                push    ecx
-                popf
-                mov     esp, ebx
-                test    eax, 40000h
-                jz      short .no_id
-                inc	byte [detected_cpu]
-                call    @@get_id_flag
-                jnz     short .yep_id
-                call    @@get_id_flag
-                jz      short .no_id
-
-.yep_id:
-                mov     eax, 1
-                cpuid
-                and     ah, 0Fh
-                mov     [detected_cpu], ah
-                mov	byte [cpuid_exists], 1
-                mov     [cpuid_flags], edx
-
-.no_id:
-                retn
-
-; =============== S U B R O U T I N E =======================================
-
-
-@@get_id_flag:
-                pushf
-                pop     eax
-                or      eax, 200000h
-                push    eax
-                popf
-                pushf
-                pop     eax
-                test    eax, 200000h
-                retn
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -579,13 +558,7 @@ mp3_uncollect_bits:
 
 
 mp3_search_get_header:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [ttt], eax
-                sbb     [ttt+4], edx
-
-.no_rdtsc_supported:
+		; 16/02/2025
                 mov	dword [mp3_extra_bytes], 0
 
 .retry_header:
@@ -638,10 +611,7 @@ mp3_search_get_header:
                 mov     [mp3_hdr_sample_rate_index], eax
                 mov     [mp3_sample_rate], edx
 
-                mov     cl, [option_rate_shift]
-                shr     edx, cl
-
-                mov     [mp3_output_sample_rate], edx
+		; 15/02/2025
                 mov     eax, [mp3_hdr_32bit_header]
                 shr     eax, 10h
                 not     eax
@@ -691,35 +661,25 @@ mp3_search_get_header:
 		; 10/01/2025
 		inc	edx
 .this_channels:
-                mov	[mp3_src_num_channels], edx
-                cmp	byte [option_mono], 0
-                jz	short .allow_stereo
-                mov	edx, 1
+                mov	[mp3_num_channels], edx
+ 		
+		; 15/02/2025
 .allow_stereo:
-                mov     [mp3_output_num_channels], edx
-                imul    edx, [mp3_bytes_per_sample]
-                mov     [mp3_samples_dst_step], edx
+		;imul	edx, [mp3_bytes_per_sample]
+                ; 17/02/2025
+		shl	edx, 1 ; [mp3_bytes_per_sample] = 2 
+		mov     [mp3_samples_dst_step], edx
                 mov     eax, [mp3_hdr_32bit_header]
                 shr     eax, 4
                 and     eax, 3
                 mov     [mp3_hdr_mode_ext], eax
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                add     [ttt], eax
-                adc     [ttt+4], edx
-
+		; 16/02/2025
 .no_rdtsc_supported@:
-                clc
+		;clc
                 retn
 
 .fail_no_header:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [ttt], eax
-                adc     [ttt+4], edx
-
+		; 16/02/2025
 .no_rdtsc_supported@@:
                 mov     dword [mp3_src_frame_size], 0
                 stc
@@ -730,11 +690,7 @@ mp3_search_get_header:
 
 
 mp3_bitstream_read_header_extra:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_read_header_extra], eax
-                sbb     [rdtsc_read_header_extra+4], edx
+                ; 16/02/2025
 
 .no_rdtsc_supported:
                 cmp     dword [mp3_hdr_flag_crc], 0
@@ -773,7 +729,7 @@ mp3_bitstream_read_header_extra:
 
 .without_crc@:
                 mov     [mp3_main_data_begin], eax
-                mov     cl, byte [mp3_src_num_channels]
+                mov     cl, byte [mp3_num_channels]
                 mov     eax, ebp        ; mp3mac_get_n_bits cl
                 shl     ebp, cl
                 rol     eax, cl
@@ -809,7 +765,7 @@ mp3_bitstream_read_header_extra:
 
 .without_crc@@@:
                 mov     [mp3_main_data_begin], eax
-                mov     cl, byte [mp3_src_num_channels]
+                mov     cl, byte [mp3_num_channels]
                 shl     cl, 1           ; 1,2 --> 2,4
                 xor     cl, 7           ;     --> 5,3
                 mov     eax, ebp        ; mp3mac_get_n_bits cl
@@ -827,7 +783,7 @@ mp3_bitstream_read_header_extra:
                 ror     ebp, cl
 
 .without_crc@@@@:
-                mov     edx, [mp3_src_num_channels]
+                mov     edx, [mp3_num_channels]
                 mov     ebx, mp3_granules
 
 .pre_channel_lop:
@@ -854,22 +810,22 @@ mp3_bitstream_read_header_extra:
                 jnz     short .pre_channel_lop
 
 .pre_lsf_done:
-                mov     eax, [mp3_nb_granules]
-                imul    eax, 12h
-                mov     [mp3_nb_frames], eax
+		mov     eax, [mp3_nb_granules]
+		imul    eax, 12h
+		mov     [mp3_nb_frames], eax
 		; 14/01/2025
 		;mov	eax, [mp3_nb_frames]
-                imul    eax, [mp3_output_num_channels]
-                imul    eax, [mp3_bytes_per_sample]
-                shl     eax, 5
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
-                mov     [mp3_samples_output_size], eax
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_read_header_extra
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                add     [rdtsc_read_header_extra], eax
-                adc     [rdtsc_read_header_extra+4], edx
+		; 16/02/2025
+		imul    eax, [mp3_num_channels]
+		;imul   eax, [mp3_bytes_per_sample]
+		;shl    eax, 5
+		; 17/02/2025
+		; [mp3_bytes_per_sample] = 2
+		shl	eax, 6 ; (eax*2) << 5
+   		; 15/02/2025
+		mov	[mp3_samples_output_size], eax
+		
+		; 16/02/2025
 
 .no_rdtsc_supported@:
                 retn
@@ -879,11 +835,7 @@ mp3_bitstream_read_header_extra:
 
 
 mp3_bitstream_read_granules:
-                test    byte [cpuid_flags], 10h ; timelog_start rdtsc_read_granule
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_read_granule], eax
-                sbb     [rdtsc_read_granule+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported:
                 mov	[_@@saved_sp], esp
@@ -1304,7 +1256,7 @@ mp3_bitstream_read_granules:
                 add     ebx, 4928       ; $mp3gr_entrysiz*2
                 inc     dword [mp3_curr_channel]
                 mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_src_num_channels]
+		cmp     eax, [mp3_num_channels]
                 jb      .hdr_channel_lop
                 pop     ebx
                 add     ebx, 2464       ; $mp3gr_entrysiz
@@ -1312,23 +1264,14 @@ mp3_bitstream_read_granules:
                 mov     eax, [mp3_curr_granule]
                 cmp     eax, [mp3_nb_granules]
                 jb      .hdr_granule_lop
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_read_granule
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                add     [rdtsc_read_granule], eax
-                adc     [rdtsc_read_granule+4], edx
-
+	
+		; 16/02/2025
 .no_rdtsc_supported@:
-                clc
+                ;clc
                 retn
 
 .error:
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_read_granule
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_read_granule], eax
-                adc     [rdtsc_read_granule+4], edx
-
+		; 16/02/2025
 .no_rdtsc_supported@@:
                 mov     esp, [_@@saved_sp]
                 stc
@@ -1339,11 +1282,7 @@ mp3_bitstream_read_granules:
 
 
 mp3_bitstream_append_to_main_data_pool:
-                test    byte [cpuid_flags], 10h ; timelog_start rdtsc_append_main
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_append_main], eax
-                sbb     [rdtsc_append_main+4], edx
+              	; 16/02/2025
 
 .no_rdtsc_supported:
                 mov     ecx, [mp3_src_frame_end]
@@ -1393,11 +1332,8 @@ mp3_bitstream_append_to_main_data_pool:
                 ;ror    ebp, cl
 
 .cont:
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_append_main
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                add     [rdtsc_append_main], eax
-                adc     [rdtsc_append_main+4], edx
+		; 16/02/2025
+		; clc ; not needed
 
 .no_rdtsc_supported@:
                 retn
@@ -1411,11 +1347,7 @@ mp3_bitstream_append_to_main_data_pool:
 
 
 mp3_bitstream_read_scalefacs:
-                test    byte [cpuid_flags], 10h ; timelog_start rdtsc_read_scalefac
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_read_scalefac], eax
-                sbb     [rdtsc_read_scalefac+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported:
                 lea     edi, [ebx+112]  ; [ebx+$mp3gr_scale_factors]
@@ -1646,11 +1578,8 @@ mp3_bitstream_read_scalefacs:
                 mov     ecx, edx
 
 .body_lsf_done:
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_read_scalefac
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                add     [rdtsc_read_scalefac], eax
-                adc     [rdtsc_read_scalefac+4], edx
+		; 16/02/2025
+		; clc ; not needed
 
 .no_rdtsc_supported@@@:
                 retn
@@ -1672,11 +1601,7 @@ hang:
 
 
 mp3_get_exponents_from_scale_factors:
-                test    byte [cpuid_flags], 10h ; timelog_start rdtsc_xlat_scalefac
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_xlat_scalefac], eax
-                sbb     [rdtsc_xlat_scalefac+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported:
                 push    ecx             ; mp3mac_push_bitstream
@@ -1773,11 +1698,8 @@ mp3_get_exponents_from_scale_factors:
                 pop     esi             ; mp3mac_pop_bitstream
                 pop     ebp
                 pop     ecx
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_xlat_scalefac
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                add     [rdtsc_xlat_scalefac], eax
-                adc     [rdtsc_xlat_scalefac+4], edx
+
+		; 16/02/2025 
 
 .no_rdtsc_supported@:
                 retn
@@ -1787,12 +1709,7 @@ mp3_get_exponents_from_scale_factors:
 
 
 mp3_huffman_decode:
-                test    byte [cpuid_flags], 10h ; in: ebx=granule, out: [sb_hybrid..]
-                                        ; timelog_start rdtsc_read_huffman
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_read_huffman], eax
-                sbb     [rdtsc_read_huffman+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported:
                 mov	eax, [ebx+8]    ; [ebx+$mp3gr_part2_3_end]
@@ -2193,14 +2110,10 @@ mp3_huffman_decode:
                 xor     eax, eax
                 rep stosd
                 pop     ecx
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_read_huffman
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                add     [rdtsc_read_huffman], eax
-                adc     [rdtsc_read_huffman+4], edx
 
+		; 16/02/2025
 .no_rdtsc_supported@:
-                clc                     ; out: cy=0=okay
+                ;clc			; out: cy=0=okay
                 retn
 
 .rle_fetch_next_small:
@@ -2255,7 +2168,8 @@ mp3_huffman_decode:
 
 
 mp3_compute_stereo:
-                cmp	dword [mp3_output_num_channels], 2 ; in: ebx=granule(s)
+		; 16/02/2025
+                cmp	dword [mp3_num_channels], 2 ; in: ebx=granule(s)
                 jnz	short .no_stereo
                 cmp	dword [mp3_hdr_mode_ext], 2 ; MODE_EXT_MS_STEREO
                                         ; only MS stereo
@@ -2268,13 +2182,7 @@ mp3_compute_stereo:
                 retn
 
 mp3_compute_ms_stereo:
-                test    byte [cpuid_flags], 10h ; ms_stereo is most commonly used
-                                        ; the 1/sqrt(2) normalization factor is included
-                                        ; in the global gain
-                jz      short .no_rdtsc_supported ; timelog_start rdtsc_ms_stereo
-                rdtsc
-                sub     [rdtsc_ms_stereo], eax
-                sbb     [rdtsc_ms_stereo+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported:
                 lea     edi, [ebx+5088] ; [ebx+$mp3gr_sb_hybrid+$mp3gr_entrysiz*2]
@@ -2308,21 +2216,13 @@ mp3_compute_ms_stereo:
                 jnz     short .ms_stereo_lop
 
 .ms_stereo_done:
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_ms_stereo
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                add     [rdtsc_ms_stereo], eax
-                adc     [rdtsc_ms_stereo+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported@:
                 retn
 
 mp3_compute_i_stereo:
-                test    byte [cpuid_flags], 10h ; timelog_start rdtsc_i_stereo
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_i_stereo], eax
-                sbb     [rdtsc_i_stereo+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported@@@:
                 mov     dword [ebx+92], 576 ; ch0
@@ -2415,11 +2315,8 @@ mp3_compute_i_stereo:
                 cmp     ebp, [_@@max_blocks]
                 jb      short .adjust_last_prev_lop
                 call    _@@apply_i_stereo
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_i_stereo
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_i_stereo], eax
-                adc     [rdtsc_i_stereo+4], edx
+
+		; 16/02/2025
 
 .no_rdtsc_supported@@@@:
                 retn
@@ -2546,11 +2443,7 @@ _@@apply_i_stereo:
 
 
 mp3_reorder_block:
-                test    byte [cpuid_flags], 10h ; timelog_start rdtsc_reorder
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_reorder], eax
-                sbb     [rdtsc_reorder+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported:
                 cmp	byte [ebx+44], 2 ; ebx+$mp3gr_block_type] ; only for type 2
@@ -2596,11 +2489,7 @@ mp3_reorder_block:
                 jb      short .outer_lop ; next
 
 .no_reorder:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@ ; timelog_end rdtsc_reorder
-                rdtsc
-                add     [rdtsc_reorder], eax
-                adc     [rdtsc_reorder+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported@:
                 retn
@@ -2610,11 +2499,7 @@ mp3_reorder_block:
 
 
 mp3_compute_antialias:
-                test    byte [cpuid_flags], 10h ; in: ebx=granule
-                jz      short .no_rdtsc_supported ; timelog_start rdtsc_antialias
-                rdtsc
-                sub     [rdtsc_antialias], eax
-                sbb     [rdtsc_antialias+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported:
                 mov     eax, [ebx+92]   ; [ebx+$mp3gr_num_nonzero_hybrids]
@@ -2785,11 +2670,7 @@ mp3_compute_antialias:
                 pop     ebx
 
 .no_antialias:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                add     [rdtsc_antialias], eax
-                adc     [rdtsc_antialias+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported@:
                 retn
@@ -3398,11 +3279,7 @@ mp3_imdct12:
 
 
 mp3_compute_imdct:
-                test    byte [cpuid_flags], 10h ; in: ebx=granule
-                jz      short .no_rdtsc_supported ; timelog_start rdtsc_imdct
-                rdtsc
-                sub     [rdtsc_imdct], eax
-                sbb     [rdtsc_imdct+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported:
                 push    ebx
@@ -3451,12 +3328,8 @@ mp3_compute_imdct:
                 mov     eax, [mp3_curr_channel]
                 imul    eax, 2304       ; SBLIMIT*18*4
                 lea     ebx, [mp3_mdct_buf+eax]
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@ ; timelog_start rdtsc_imdct36
-                rdtsc
-                sub     [rdtsc_imdct36], eax
-                sbb     [rdtsc_imdct36+4], edx
-
+		
+		; 16/02/2025
 .no_rdtsc_supported@:
                 mov	dword [_@@@JJJ], 0
                 cmp	dword [_@@mdct_long_end], 0
@@ -3486,19 +3359,10 @@ mp3_compute_imdct:
                 jb	short .imdct36_lop
 
 .imdct36_done:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@ ; timelog_end rdtsc_imdct36
-                rdtsc
-                add     [rdtsc_imdct36], eax
-                adc     [rdtsc_imdct36+4], edx
-
+		; 16/02/2025
 .no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h ; timelog_start rdtsc_imdct12
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_imdct12], eax
-                sbb     [rdtsc_imdct12+4], edx
 
+		; 16/02/2025
 .no_rdtsc_supported@@@:
                 mov     eax, [_@@@JJJ]
                 cmp     eax, [_@@sblimit]
@@ -3713,19 +3577,11 @@ mp3_compute_imdct:
                 jb      .imdct12_lop
 
 .imdct12_done:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@ ; timelog_end rdtsc_imdct12
-                rdtsc
-                add     [rdtsc_imdct12], eax
-                adc     [rdtsc_imdct12+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported@@@@:
-                test    byte [cpuid_flags], 10h ; timelog_start rdtsc_imdct0
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                sub     [rdtsc_imdct0], eax
-                sbb     [rdtsc_imdct0+4], edx
 
+		; 16/02/2025
 .no_rdtsc_supported@@@@@:
                 cmp     dword [_@@@JJJ], 32 ; SBLIMIT
                 jnb     .zero_outer_done
@@ -3797,20 +3653,12 @@ mp3_compute_imdct:
                 jb      .zero_outer_lop
 
 .zero_outer_done:
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_imdct0
-                jz      short .no_rdtsc_supported@@@@@@
-                rdtsc
-                add     [rdtsc_imdct0], eax
-                adc     [rdtsc_imdct0+4], edx
+		; 16/02/2025
 
 .no_rdtsc_supported@@@@@@:
                 pop     ebx
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_imdct
-                jz      short .no_rdtsc_supported@@@@@@@
-                rdtsc
-                add     [rdtsc_imdct], eax
-                adc     [rdtsc_imdct+4], edx
 
+		; 16/02/2025
 .no_rdtsc_supported@@@@@@@:
                 retn
 
@@ -5363,1273 +5211,14 @@ mp3_dct32_shift_2:
                 mov     [edi+112], eax
                 retn
 
-
 ; =============== S U B R O U T I N E =======================================
 
-
-synth_16bit_shift_0_fast:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 0,0,1
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub     dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10
-                and     eax, 1E0h       ; 1FFh-1Fh
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4]
-                call    mp3_dct32_shift_0
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_16bit_shift_0_fast ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fast
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4
-                inc     dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4
-                inc     dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_16bit_shift_0_fast:
-                mov     eax, [mp3_curr_syn_index]
-                test    eax, 1E0h       ; 1FFh-1Fh
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax
-                and     ebp, 1C0h       ; @win1,1FFh-1Fh-20h
-                and     eax, 420h       ; and eax,20h+(1 shl 10) ; bit5 and channel
-                lea     esi, [eax+10h]  ; @@syn1,[eax+10h]
-                lea     edi, [eax+30h]  ; @@syn2,[eax+30h]
-                neg     ebp
-                and     ebp, 1C0h       ; @win1,1FFh-1Fh-20h
-                mov     ecx, [mp3_curr_syn_dst] ; @@dst,dword ptr [mp3_curr_syn_dst]
-
-.samples_lop:
-                mov     ebx, 20002000h  ; mov @@sum,(8000h SHL (@@out_shift))+(1 SHL (@@out_shift-1))
-                                        ; @@out_shift equ (OUT_SHIFT_fast+(8*force_8bit))
-                                        ; out_shift = 14
-                mov     edx, [mp3_synth_buf+esi*4] ; @@SUM8 macro sum,win,ww,syn
-                                        ; @@SUM8 @@sum,@@win1,0,@@syn1
-                                        ; IRP nn,0,1,2,3,4,5,6,7
-                                        ; mov edx,dword ptr [mp3_synth_buf+syn*4+(nn*64*4)]
-                                        ; movsx eax,word ptr [mp3_synth_win+win*2+(nn*64*2)+ww*2]
-                                        ; imul eax,edx
-                                        ; add sum,eax
-                movsx   eax, word [mp3_synth_win+ebp*2] ; nn=0, ww=0
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+80h)+ebp*2] ; nn=1, ww=0
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+100h)+ebp*2] ; nn=2
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+180h)+ebp*2] ; nn=3
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+200h)+ebp*2] ; nn=4
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+280h)+ebp*2] ; nn=5
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+300h)+ebp*2] ; nn=6
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+380h)+ebp*2] ; nn=7
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [mp3_synth_buf+edi*4] ; @@SUM8 @@sum,@@win1,32, @@syn2
-                movsx   eax, word [(mp3_synth_win+40h)+ebp*2] ; nn=0, ww=32
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+0C0h)+ebp*2] ; nn=1, ww=32
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+140h)+ebp*2] ; nn=2
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+1C0h)+ebp*2] ; nn=3
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+240h)+ebp*2] ; nn=4
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+2C0h)+ebp*2] ; nn=5
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+340h)+ebp*2] ; nn=6
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+3C0h)+ebp*2] ; nn=7
-                imul    eax, edx
-                add     ebx, eax
-                cmp     ebx, 40000000h  ; cmp @@sum,10000h SHL (@@out_shift) ; out_shift = 14
-                jnb     short .sat
-                sar     ebx, 14         ; sar @@sum,(@@out_shift)
-                sub     ebx, 8000h      ; sub @@sum,8000h ; make 16bit signed
-
-.sat_back:
-                mov     [ecx], bx       ; mov word ptr [@@dst],@@sum_16bit
-                add     ecx, [mp3_samples_dst_step]
-                inc     esi             ; inc @@syn1
-                dec     edi             ; dec @@syn2
-                inc     ebp             ; inc @@win1
-                test    ebp, 1Fh        ; IF LONG_WINDOW
-                jnz     .samples_lop   ; test @@win1,1Fh
-                retn
-
-.sat:
-                sar     ebx, 31         ; sar @@sum,31 ; FFFFFFFFh,00000000h
-                xor     ebx, 7FFFh      ; xor @@sum,7fffh ; FFFF8000h,00007FFFh (signed 16bit)
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4] ; IF SYNTH32
-                lea     edi, [esi+2048] ; [esi+512*4]
-                mov     ecx, 18         ; (12h*4)/4
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-synth_16bit_shift_1_fast:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 0,1,1
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub	dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10
-                and     eax, 1E0h       ; 1FFh-1Fh
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4]
-                call    mp3_dct32_shift_1 ; mp3_dct32_shift_&rate_shift
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_16bit_shift_1_fast ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fast
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4
-                inc     dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4
-                inc     dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_16bit_shift_1_fast:
-                mov     eax, [mp3_curr_syn_index]
-                test    eax, 1E0h       ; 1FFh-1Fh
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax
-                and     ebp, 1C0h
-                and     eax, 420h
-                lea     esi, [eax+10h]
-                lea     edi, [eax+30h]
-                neg     ebp
-                and     ebp, 1C0h
-                mov     ecx, [mp3_curr_syn_dst]
-
-.samples_lop:
-                mov     ebx, 20002000h  ; mov @@sum,(8000h SHL (@@out_shift))+(1 SHL (@@out_shift-1))
-                                        ; @@out_shift equ (OUT_SHIFT_fast+(8*force_8bit))
-                                        ; out_shift = 14
-                mov     edx, [mp3_synth_buf+esi*4] ; @@SUM8 macro sum,win,ww,syn
-                                        ; @@SUM8 @@sum,@@win1,0,@@syn1
-                                        ; IRP nn,0,1,2,3,4,5,6,7
-                                        ; mov edx,dword ptr [mp3_synth_buf+syn*4+(nn*64*4)]
-                                        ; movsx eax,word ptr [mp3_synth_win+win*2+(nn*64*2)+ww*2]
-                                        ; imul eax,edx
-                                        ; add sum,eax
-                movsx   eax, word [mp3_synth_win+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+esi*4] ; nn=1
-                movsx   eax, word [(mp3_synth_win+80h)+ebp*2] ; ww=0
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+100h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+180h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+esi*4] ; nn=4
-                movsx   eax, word [(mp3_synth_win+200h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+280h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+300h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+esi*4] ; nn=7
-                movsx   eax, word [(mp3_synth_win+380h)+ebp*2] ; ww=0
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [mp3_synth_buf+edi*4]
-                movsx   eax, word [(mp3_synth_win+40h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+0C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+edi*4] ; nn=2, ww=32
-                movsx   eax, word [(mp3_synth_win+140h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+1C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+240h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+2C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+edi*4] ; nn=6, ww=32
-                movsx   eax, word [(mp3_synth_win+340h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+3C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                cmp     ebx, 40000000h  ; cmp  @@sum,10000h SHL (@@out_shift)
-                jnb     short .sat
-                sar     ebx, 14         ; sar @@sum,(@@out_shift)
-                sub     ebx, 8000h      ; make 16bit signed
-
-.sat_back:
-                mov     [ecx], bx
-                add     ecx, [mp3_samples_dst_step]
-                add     esi, 2          ; IF rate_shift
-                                        ; add  @@syn1,1 shl rate_shift
-                sub     edi, 2          ; sub @@syn2,1 shl rate_shift
-                add     ebp, 2          ; add @@win1,1 shl rate_shift
-                test    ebp, 1Fh        ; IF LONG_WINDOW
-                jnz     .samples_lop   ; test @@win1,1fh
-                retn
-
-.sat:
-                sar     ebx, 31         ; sar @@sum,31 ; FFFFFFFFh,00000000h
-                xor     ebx, 7FFFh      ; xor @@sum,7fffh ; FFFF8000h,00007FFFh (signed 16bit)
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4]
-                lea     edi, [esi+2048] ; [esi+512*4]
-                mov     ecx, 18         ; (12h*4)/4
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-synth_16bit_shift_2_fast:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 0,2,1
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub     dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10
-                and     eax, 1E0h       ; 1FFh-1Fh
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4]
-                call    mp3_dct32_shift_2 ; mp3_dct32_shift_&rate_shift
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_16bit_shift_2_fast ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fas
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4
-                inc     dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4
-                inc     dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_16bit_shift_2_fast:
-                mov     eax, [mp3_curr_syn_index]
-                test    eax, 1E0h       ; 1FFh-1Fh
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax
-                and     ebp, 1C0h       ; 1FFh-1Fh-20h
-                and     eax, 420h       ; 20h+(1 shl 10)
-                lea     esi, [eax+10h]
-                lea     edi, [eax+30h]
-                neg     ebp
-                and     ebp, 1C0h
-                mov     ecx, [mp3_curr_syn_dst]
-
-.samples_lop:
-                mov     ebx, 20002000h  ; mov @@sum,(8000h SHL (@@out_shift))+(1 SHL (@@out_shift-1))
-                                        ; @@out_shift equ (OUT_SHIFT_fast+(8*force_8bit))
-                                        ; out_shift = 14
-                mov     edx, [mp3_synth_buf+esi*4]
-                movsx   eax, word [mp3_synth_win+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+80h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+100h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+180h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+200h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+280h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+300h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+380h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [mp3_synth_buf+edi*4]
-                movsx   eax, word [(mp3_synth_win+40h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+0C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+140h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+1C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+240h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+2C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+340h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+3C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                cmp     ebx, 40000000h
-                jnb     short .sat
-                sar     ebx, 14
-                sub     ebx, 8000h      ; make 16bit signed
-
-.sat_back:
-                mov     [ecx], bx
-                add     ecx, [mp3_samples_dst_step]
-                add     esi, 4
-                sub     edi, 4
-                add     ebp, 4
-                test    ebp, 1Fh
-                jnz     .samples_lop
-                retn
-
-.sat:
-                sar     ebx, 31
-                xor     ebx, 7FFFh
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4]
-                lea     edi, [esi+2048]
-                mov     ecx, 18
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-synth_8bit_shift_0_fast:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 1,0,1
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub     dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10
-                and     eax, 1E0h       ; 1FFh-1Fh
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4]
-                call    mp3_dct32_shift_0 ; mp3_dct32_shift_&rate_shift
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_8bit_shift_0_fast ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fast
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4
-                inc     dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4
-                inc     dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_8bit_shift_0_fast:
-                mov     eax, [mp3_curr_syn_index]
-                test    eax, 1E0h       ; 1FFh-1Fh
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax
-                and     ebp, 1C0h       ; 1FFh-1Fh-20h
-                and     eax, 420h       ; 20h+(1 shl 10)
-                lea     esi, [eax+10h]
-                lea     edi, [eax+30h]
-                neg     ebp
-                and     ebp, 1C0h
-                mov     ecx, [mp3_curr_syn_dst]
-
-.samples_lop:
-                mov     ebx, 20200000h  ; mov @@sum,(80h SHL (@@out_shift))+(1 SHL (@@out_shift-1))
-                                        ; @@out_shift equ (OUT_SHIFT_fast(8*force_8bit))
-                                        ; @@out_shift = 22
-                mov     edx, [mp3_synth_buf+esi*4] ; @@SUM8 macro sum,win,ww,syn
-                                        ; @@SUM8 @@sum,@@win1,0,@@syn1
-                                        ; IRP nn,0,1,2,3,4,5,6,7
-                                        ; mov edx,dword ptr [mp3_synth_buf+syn*4+(nn*64*4)]
-                                        ; movsx eax,word ptr [mp3_synth_win+win*2+(nn*64*2)+ww*2]
-                                        ; imul eax,edx
-                                        ; add sum,eax
-                movsx   eax, word [mp3_synth_win+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+esi*4] ; nn=1
-                movsx   eax, word [(mp3_synth_win+80h)+ebp*2] ; ww=0
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+100h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+180h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+200h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+280h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+300h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+380h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [mp3_synth_buf+edi*4]
-                movsx   eax, word [(mp3_synth_win+40h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+0C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+edi*4] ; nn=2
-                movsx   eax, word [(mp3_synth_win+140h)+ebp*2] ; ww=32
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+1C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+240h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+2C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+340h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+3C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                cmp     ebx, 40000000h  ; cmp  @@sum,100h SHL (@@out_shift)
-                jnb     short .sat
-                sar     ebx, 22         ; sar @@sum,(@@out_shift)
-
-.sat_back:
-                mov     [ecx], bl       ; mov byte ptr [@@dst],@@sum_8bit
-                add     ecx, [mp3_samples_dst_step]
-                inc     esi             ; inc @@syn1
-                dec     edi             ; dec @@syn2
-                inc     ebp             ; inc @@win1
-                test    ebp, 1Fh        ; IF LONG_WINDOW
-                                        ; test @@win1,1fh
-                jnz     .samples_lop
-                retn
-
-.sat:                                 
-                sar     ebx, 31         ; sar @@sum,31 ; FFFFFFFFh,00000000h
-                not     ebx             ; IF force_8bit
-                                        ; not @@sum ; 00000000h,FFFFFFFFh (unsigned 8bit)
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4]
-                lea     edi, [esi+2048] ; [esi+512*4]
-                mov     ecx, 18         ; (12h*4)/4
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-synth_8bit_shift_1_fast:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 1,1,1
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub     dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10
-                and     eax, 1E0h       ; 1FFh-1Fh
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4]
-                call    mp3_dct32_shift_1 ; mp3_dct32_shift_&rate_shift
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_8bit_shift_1_fast ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fast
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4
-                inc     dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4
-                inc     dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_8bit_shift_1_fast:
-                mov     eax, [mp3_curr_syn_index]
-                test    eax, 1E0h
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax
-                and     ebp, 1C0h
-                and     eax, 420h
-                lea     esi, [eax+10h]
-                lea     edi, [eax+30h]
-                neg     ebp
-                and     ebp, 1C0h
-                mov     ecx, [mp3_curr_syn_dst]
-
-.samples_lop:
-                mov     ebx, 20200000h
-                mov     edx, [mp3_synth_buf+esi*4]
-                movsx   eax, word [mp3_synth_win+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+80h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+100h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+180h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+200h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+280h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+300h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+380h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [mp3_synth_buf+edi*4]
-                movsx   eax, word [(mp3_synth_win+40h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+0C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+140h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+1C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+240h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+2C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+340h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+3C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                cmp     ebx, 40000000h
-                jnb     short .sat
-                sar     ebx, 22
-
-.sat_back:
-                mov     [ecx], bl
-                add     ecx, [mp3_samples_dst_step]
-                add     esi, 2
-                sub     edi, 2
-                add     ebp, 2
-                test    ebp, 1Fh
-                jnz     .samples_lop
-                retn
-
-.sat:
-                sar     ebx, 31
-                not     ebx
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4]
-                lea     edi, [esi+2048]
-                mov     ecx, 18
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-synth_8bit_shift_2_fast:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 1,2,1
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub     dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10
-                and     eax, 1E0h       ; 1FFh-1Fh
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4]
-                call    mp3_dct32_shift_2 ; mp3_dct32_shift_&rate_shift
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_8bit_shift_2_fast ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fast
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4
-                inc     dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4
-                inc     dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_8bit_shift_2_fast:
-                mov     eax, [mp3_curr_syn_index]
-                test    eax, 1E0h
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax
-                and     ebp, 1C0h
-                and     eax, 420h
-                lea     esi, [eax+10h]
-                lea     edi, [eax+30h]
-                neg     ebp
-                and     ebp, 1C0h
-                mov     ecx, [mp3_curr_syn_dst]
-
-.samples_lop:
-                mov     ebx, 20200000h
-                mov     edx, [mp3_synth_buf+esi*4]
-                movsx   eax, word [mp3_synth_win+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+80h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+100h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+180h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+200h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+280h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+300h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+esi*4]
-                movsx   eax, word [(mp3_synth_win+380h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [mp3_synth_buf+edi*4]
-                movsx   eax, word [(mp3_synth_win+40h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+100h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+0C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+200h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+140h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+1C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+240h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+2C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+600h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+340h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                movsx   eax, word [(mp3_synth_win+3C0h)+ebp*2]
-                imul    eax, edx
-                add     ebx, eax
-                cmp     ebx, 40000000h
-                jnb     short .sat
-                sar     ebx, 22
-
-.sat_back:
-                mov     [ecx], bl
-                add     ecx, [mp3_samples_dst_step]
-                add     esi, 4
-                sub     edi, 4
-                add     ebp, 4
-                test    ebp, 1Fh
-                jnz     .samples_lop
-                retn
-
-.sat:
-                sar     ebx, 31
-                not     ebx
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4]
-                lea     edi, [esi+2048]
-                mov     ecx, 18
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
+		; 15/02/2025
+mp3_synth_filter_proc:
+		;;;;
 synth_16bit_shift_0_slow:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
 
+               	; 16/02/2025
 .no_rdtsc_supported:
                 mov	esi, mp3_sb_samples
                 mov	edi, [mp3_samples_dst]
@@ -6643,12 +5232,8 @@ synth_16bit_shift_0_slow:
 
 .synth_frame_lop:
                 push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
+	
+		; 16/02/2025
 .no_rdtsc_supported@:
                 mov     edx, [mp3_curr_channel]
                 mov     eax, [mp3_synth_index+edx*4]
@@ -6660,33 +5245,20 @@ synth_16bit_shift_0_slow:
                 mov     edi, [mp3_curr_syn_index]
                 lea     edi, [mp3_synth_buf+edi*4]
                 call    mp3_dct32_shift_0 ; mp3_dct32_shift_&rate_shift
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_dct32
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
+		
+		; 16/02/2025		
 .no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h ; timelog_start rdtsc_synth
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
 
+		; 16/02/2025
 .no_rdtsc_supported@@@:
                 call    mp3_synth_filter_this_16bit_shift_0_slow
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_synth
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
+	
+		; 16/02/2025
 .no_rdtsc_supported@@@@:
                 pop     esi
                 mov     eax, [mp3_samples_dst_step]
                 shl     eax, 5
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
+		; 15/02/2025
                 add     [mp3_curr_syn_dst], eax
                 add     esi, 128        ; SBLIMIT*4
                 inc     dword [mp3_curr_frame]
@@ -6695,18 +5267,19 @@ synth_16bit_shift_0_slow:
                 jb      .synth_frame_lop
                 pop     edi
                 pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4
+		;add	edi, [mp3_bytes_per_sample]
+		; 17/02/2025
+		;add	edi, 2 ; [mp3_bytes_per_sample] = 2
+                inc	edi
+		inc	edi
+		add     esi, 4608       ; 36*SBLIMIT*4
                 inc     dword [mp3_curr_channel]
                 mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
+		; 16/02/2025
+                cmp     eax, [mp3_num_channels]
                 jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_synth_dct
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
+	
+		; 16/02/2025
 .no_rdtsc_supported@@@@@:
                 retn
 
@@ -6834,1046 +5407,6 @@ mp3_synth_filter_this_16bit_shift_0_slow:
 ; =============== S U B R O U T I N E =======================================
 
 
-synth_16bit_shift_1_slow:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 0,1,0
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub     dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10         ; channel*1024
-                and     eax, 1E0h       ; 1FFh-1Fh ; index(0..511), align 32
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4]
-                call    mp3_dct32_shift_1 ; call mp3_dct32_shift_&rate_shift
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_16bit_shift_1_slow ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fast
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5
-                mov     cl, [option_rate_shift] ; IF with_rate_shift
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4  ; src+32*4
-                inc	dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4 ; src
-                inc	dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_16bit_shift_1_slow:
-                mov     eax, [mp3_curr_syn_index]
-                test    eax, 1E0h
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax
-                and     ebp, 1C0h
-                and     eax, 420h
-                lea     esi, [eax+10h]
-                lea     edi, [eax+30h]
-                neg     ebp
-                and     ebp, 1C0h
-                mov     ecx, [mp3_curr_syn_dst]
-
-.samples_lop:
-                mov     ebx, 100010h
-                mov     edx, [mp3_synth_buf+esi*4]
-                mov     eax, [mp3_synth_win+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+100h)+esi*4]
-                mov     eax, [(mp3_synth_win+100h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                mov     eax, [(mp3_synth_win+200h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                mov     eax, [(mp3_synth_win+300h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+400h)+esi*4]
-                mov     eax, [(mp3_synth_win+400h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                mov     eax, [(mp3_synth_win+500h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                mov     eax, [(mp3_synth_win+600h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+700h)+esi*4]
-                mov     eax, [(mp3_synth_win+700h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [mp3_synth_buf+edi*4]
-                mov     eax, [(mp3_synth_win+80h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+100h)+edi*4]
-                mov     eax, [(mp3_synth_win+180h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+200h)+edi*4]
-                mov     eax, [(mp3_synth_win+280h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                mov     eax, [(mp3_synth_win+380h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                mov     eax, [(mp3_synth_win+480h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                mov     eax, [(mp3_synth_win+580h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+600h)+edi*4]
-                mov     eax, [(mp3_synth_win+680h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                mov     eax, [(mp3_synth_win+780h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                cmp     ebx, 200000h
-                jnb     short .sat
-                sar     ebx, 5
-                sub     ebx, 8000h
-
-.sat_back:
-                mov     [ecx], bx
-                add     ecx, [mp3_samples_dst_step]
-                add     esi, 2
-                sub     edi, 2
-                add     ebp, 2
-                test    ebp, 1Fh
-                jnz     .samples_lop
-                retn
-
-.sat:
-                sar     ebx, 31
-                xor     ebx, 7FFFh
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4]
-                lea     edi, [esi+2048]
-                mov     ecx, 18
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-synth_16bit_shift_2_slow:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 0,2,0
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub     dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10
-                and     eax, 1E0h       ; 1FFh-1Fh
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4]
-                call    mp3_dct32_shift_2 ; call mp3_dct32_shift_&rate_shift
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_16bit_shift_2_slow ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fast
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4
-                inc     dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4
-                inc     dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_16bit_shift_2_slow:
-                mov     eax, [mp3_curr_syn_index]
-                test    eax, 1E0h
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax
-                and     ebp, 1C0h
-                and     eax, 420h
-                lea     esi, [eax+10h]
-                lea     edi, [eax+30h]
-                neg     ebp
-                and     ebp, 1C0h
-                mov     ecx, [mp3_curr_syn_dst]
-
-.samples_lop:
-                mov     ebx, 100010h
-                mov     edx, [mp3_synth_buf+esi*4]
-                mov     eax, [mp3_synth_win+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+100h)+esi*4]
-                mov     eax, [(mp3_synth_win+100h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                mov     eax, [(mp3_synth_win+200h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                mov     eax, [(mp3_synth_win+300h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+400h)+esi*4]
-                mov     eax, [(mp3_synth_win+400h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                mov     eax, [(mp3_synth_win+500h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                mov     eax, [(mp3_synth_win+600h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+700h)+esi*4]
-                mov     eax, [(mp3_synth_win+700h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [mp3_synth_buf+edi*4]
-                mov     eax, [(mp3_synth_win+80h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+100h)+edi*4]
-                mov     eax, [(mp3_synth_win+180h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+200h)+edi*4]
-                mov     eax, [(mp3_synth_win+280h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                mov     eax, [(mp3_synth_win+380h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                mov     eax, [(mp3_synth_win+480h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                mov     eax, [(mp3_synth_win+580h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+600h)+edi*4]
-                mov     eax, [(mp3_synth_win+680h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                mov     eax, [(mp3_synth_win+780h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                cmp     ebx, 200000h
-                jnb     short .sat
-                sar     ebx, 5
-                sub     ebx, 8000h
-
-.sat_back:
-                mov     [ecx], bx
-                add     ecx, [mp3_samples_dst_step]
-                add     esi, 4
-                sub     edi, 4
-                add     ebp, 4
-                test    ebp, 1Fh
-                jnz     .samples_lop
-                retn
-
-.sat:
-                sar     ebx, 31
-                xor     ebx, 7FFFh
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4]
-                lea     edi, [esi+2048]
-                mov     ecx, 18
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-synth_8bit_shift_0_slow:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 1,0,0
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub     dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10
-                and     eax, 1E0h       ; 1FFh-1Fh
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4]
-                call    mp3_dct32_shift_0
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_8bit_shift_0_slow ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fast
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4
-                inc     dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4
-                inc     dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_8bit_shift_0_slow:
-                mov     eax, [mp3_curr_syn_index]
-                test    eax, 1E0h
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax
-                and     ebp, 1C0h
-                and     eax, 420h
-                lea     esi, [eax+10h]
-                lea     edi, [eax+30h]
-                neg     ebp
-                and     ebp, 1C0h
-                mov     ecx, [mp3_curr_syn_dst]
-
-.samples_lop:
-                mov     ebx, 101000h
-                mov     edx, [mp3_synth_buf+esi*4]
-                mov     eax, [mp3_synth_win+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+100h)+esi*4]
-                mov     eax, [(mp3_synth_win+100h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                mov     eax, [(mp3_synth_win+200h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                mov     eax, [(mp3_synth_win+300h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+400h)+esi*4]
-                mov     eax, [(mp3_synth_win+400h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                mov     eax, [(mp3_synth_win+500h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                mov     eax, [(mp3_synth_win+600h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+700h)+esi*4]
-                mov     eax, [(mp3_synth_win+700h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [mp3_synth_buf+edi*4]
-                mov     eax, [(mp3_synth_win+80h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+100h)+edi*4]
-                mov     eax, [(mp3_synth_win+180h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+200h)+edi*4]
-                mov     eax, [(mp3_synth_win+280h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                mov     eax, [(mp3_synth_win+380h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                mov     eax, [(mp3_synth_win+480h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                mov     eax, [(mp3_synth_win+580h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+600h)+edi*4]
-                mov     eax, [(mp3_synth_win+680h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                mov     eax, [(mp3_synth_win+780h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                cmp     ebx, 200000h
-                jnb     short .sat
-                sar     ebx, 13
-
-.sat_back:
-                mov     [ecx], bl
-                add     ecx, [mp3_samples_dst_step]
-                inc     esi
-                dec     edi
-                inc     ebp
-                test    ebp, 1Fh
-                jnz     .samples_lop
-                retn
-
-.sat:
-                sar     ebx, 31
-                not     ebx
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4]
-                lea     edi, [esi+2048]
-                mov     ecx, 18
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-synth_8bit_shift_1_slow:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 1,1,0
-                                        ; force_8bit, rate_shift=1, force_fast=0
-                jz      short .no_rdtsc_supported
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub     dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10
-                and     eax, 1E0h       ; 1FFh-1Fh
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4]
-                call    mp3_dct32_shift_1 ; mp3_dct32_shift_&rate_shift ; rate_shift = 1
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_8bit_shift_1_slow ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fast
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5          ; mul32
-                mov     cl, [option_rate_shift]
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4
-                inc	dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4
-                inc	dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_8bit_shift_1_slow:
-                mov     eax, [mp3_curr_syn_index] ; IF LONG_WINDOW
-                test    eax, 1E0h       ; 1FFh-1Fh
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax
-                and     ebp, 1C0h       ; 1FFh-1Fh-20h
-                and     eax, 420h       ; 20h+(1 shl 10)
-                lea     esi, [eax+10h]
-                lea     edi, [eax+30h]
-                neg     ebp
-                and     ebp, 1C0h
-                mov     ecx, [mp3_curr_syn_dst]
-
-.samples_lop:
-                mov     ebx, 101000h    ; mov @@sum,(8000h SHL (@@out_shift))+(1 SHL (@@out_shift-1))
-                                        ; @@out_shift equ (OUT_SHIFT_slow+(8*force_8bit))
-                                        ; OUT_SHIFT_slow = 5 ; @@out_shift = 13
-                mov     edx, [mp3_synth_buf+esi*4] ; @@SUM8 @@sum,@@win1,0,@@syn1
-                                        ; @@SUM8 macro sum,win,ww,syn
-                                        ;   IRP nn,0,1,2,3,4,5,6,7
-                mov     eax, [mp3_synth_win+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+100h)+esi*4] ; @@syn1 equ esi
-                mov     eax, [(mp3_synth_win+100h)+ebp*4] ; @@win1 equ ebp
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                mov     eax, [(mp3_synth_win+200h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                mov     eax, [(mp3_synth_win+300h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+400h)+esi*4]
-                mov     eax, [(mp3_synth_win+400h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                mov     eax, [(mp3_synth_win+500h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                mov     eax, [(mp3_synth_win+600h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+700h)+esi*4]
-                mov     eax, [(mp3_synth_win+700h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [mp3_synth_buf+edi*4]
-                mov     eax, [(mp3_synth_win+80h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+100h)+edi*4] ; @@SUM8 @@sum,@@win1,32,@@syn2
-                                        ; @@syn2 equ edi
-                                        ; @@win1 equ ebp
-                mov     eax, [(mp3_synth_win+180h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+200h)+edi*4]
-                mov     eax, [(mp3_synth_win+280h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                mov     eax, [(mp3_synth_win+380h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                mov     eax, [(mp3_synth_win+480h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                mov     eax, [(mp3_synth_win+580h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+600h)+edi*4]
-                mov     eax, [(mp3_synth_win+680h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                mov     eax, [(mp3_synth_win+780h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                cmp     ebx, 200000h    ; cmp @@sum,100h SHL (@@out_shift)
-                jnb     short .sat
-                sar     ebx, 13         ; sar @@sum,(@@out_shift)
-
-.sat_back:
-                mov     [ecx], bl
-                add     ecx, [mp3_samples_dst_step]
-                add     esi, 2
-                sub     edi, 2
-                add     ebp, 2
-                test    ebp, 1Fh
-                jnz     .samples_lop
-                retn
-
-.sat:
-                sar     ebx, 31         ; sar @@sum,31 ; FFFFFFFFh,00000000h
-                not     ebx
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4]
-                lea     edi, [esi+2048]
-                mov     ecx, 18
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-synth_8bit_shift_2_slow:
-                test    byte [cpuid_flags], 10h ; SYNTH_MACRO 1,2,0 ; 8bit, quarter rate
-                                        ; force_8bit, rate_shift=2, force_fast=0
-                jz      short .no_rdtsc_supported ; timelog_start rdtsc_synth_dct
-                rdtsc
-                sub     [rdtsc_synth_dct], eax
-                sbb     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported:
-                mov	esi, mp3_sb_samples
-                mov	edi, [mp3_samples_dst]
-                mov	dword [mp3_curr_channel], 0
-
-.synth_channel_lop:
-                push	esi
-                push	edi
-                mov	[mp3_curr_syn_dst], edi
-                mov	dword [mp3_curr_frame], 0
-
-.synth_frame_lop:
-                push    esi             ; sb_samples[ch][i]
-                test    byte [cpuid_flags], 10h ; timelog_start rdtsc_dct32
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                sub     [rdtsc_dct32], eax
-                sbb     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@:
-                mov     edx, [mp3_curr_channel]
-                mov     eax, [mp3_synth_index+edx*4]
-                sub     dword [mp3_synth_index+edx*4], 32
-                shl     edx, 10         ; channel*1024
-                and     eax, 1E0h       ; 1FFh-1Fh ; index(0..511), align 32
-                or      eax, edx
-                mov     [mp3_curr_syn_index], eax
-                mov     edi, [mp3_curr_syn_index]
-                lea     edi, [mp3_synth_buf+edi*4] ; IF SYNTH32
-                call    mp3_dct32_shift_2 ; mp3_dct32_shift_&rate_shift ; rate_shift=2
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@ ; timelog_end rdtsc_dct32
-                rdtsc
-                add     [rdtsc_dct32], eax
-                adc     [rdtsc_dct32+4], edx
-
-.no_rdtsc_supported@@:
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@ ; timelog_start rdtsc_synth
-                rdtsc
-                sub     [rdtsc_synth], eax
-                sbb     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@:
-                call    mp3_synth_filter_this_8bit_shift_2_slow ;
-                                        ; mp3_synth_filter_this_&force_8bit&_&rate_shift&_&force_fast
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_synth
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                add     [rdtsc_synth], eax
-                adc     [rdtsc_synth+4], edx
-
-.no_rdtsc_supported@@@@:
-                pop     esi             ; src
-                mov     eax, [mp3_samples_dst_step]
-                shl     eax, 5          ; mul32
-                mov     cl, [option_rate_shift] ; IF with_rate_shift
-                shr     eax, cl
-                add     [mp3_curr_syn_dst], eax
-                add     esi, 128        ; SBLIMIT*4 ; src+32*4
-                inc     dword [mp3_curr_frame]
-                mov     eax, [mp3_curr_frame]
-                cmp     eax, [mp3_nb_frames]
-                jb      .synth_frame_lop
-                pop     edi
-                pop     esi
-                add     edi, [mp3_bytes_per_sample]
-                add     esi, 4608       ; 36*SBLIMIT*4 ; src
-                inc     dword [mp3_curr_channel]
-                mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
-                jb      .synth_channel_lop
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_synth_dct
-                jz      short .no_rdtsc_supported@@@@@
-                rdtsc
-                add     [rdtsc_synth_dct], eax
-                adc     [rdtsc_synth_dct+4], edx
-
-.no_rdtsc_supported@@@@@:
-                retn
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_synth_filter_this_8bit_shift_2_slow:
-                mov     eax, [mp3_curr_syn_index]
-                test    eax, 1E0h       ; 1FFh-1Fh ; offset
-                jz      .append_copy_to_window
-                nop
-
-.append_copy_to_window_back:
-                mov     ebp, eax        ; @@win1
-                and     ebp, 1C0h       ; 1FFh-1Fh-20h
-                and     eax, 420h       ; 20h+(1 shl 10) ; bit5 and channel
-                lea     esi, [eax+10h]  ; @@syn1
-                lea     edi, [eax+30h]  ; @@syn2
-                neg     ebp
-                and     ebp, 1C0h       ; 1FFh-1Fh-20h
-                mov     ecx, [mp3_curr_syn_dst] ; @@dst
-
-.samples_lop:
-                mov     ebx, 101000h    ; mov @@sum,(80h SHL (@@out_shift))+(1 SHL (@@out_shift-1))
-                                        ; @@out_shift equ (OUT_SHIFT_slow+(8*force_8bit))
-                                        ; @@out_shift = 13 ; OUT_SHIFT_slow = 5
-                mov     edx, [mp3_synth_buf+esi*4] ; @@SUM8 @@sum,@@win1,0,@@syn1
-                                        ; @@SUM8 macro sum,win,ww, syn
-                                        ; IRP nn,0,1,2,3,4,5,6,7
-                                        ; [mp3_synth_buf+syn*4+(nn*64*4)]
-                mov     eax, [mp3_synth_win+ebp*4] ; [mp3_synth_win+win*4+(nn*64*4)+ww*4]
-                imul    edx             ; 64bit = 32bit * 32bit
-                add     ebx, edx        ; add sum,edx ; sum from MSW of result
-                mov     edx, [(mp3_synth_buf+100h)+esi*4] ;
-                                        ; [mp3_synth_buf+syn*4+(nn*64*4)] ; nn=1
-                mov     eax, [(mp3_synth_win+100h)+ebp*4] ;
-                                        ; [mp3_synth_win+win*4+(nn*64*4)+ww*4] ; nn=1
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+200h)+esi*4]
-                mov     eax, [(mp3_synth_win+200h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+300h)+esi*4]
-                mov     eax, [(mp3_synth_win+300h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+400h)+esi*4] ;
-                                        ; [mp3_synth_buf+syn*4+(nn*64*4)] ; nn=4
-                mov     eax, [(mp3_synth_win+400h)+ebp*4] ;
-                                        ; [mp3_synth_win+win*4+(nn*64*4)+ww*4] ; nn=4
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+500h)+esi*4]
-                mov     eax, [(mp3_synth_win+500h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+600h)+esi*4]
-                mov     eax, [(mp3_synth_win+600h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+700h)+esi*4]
-                mov     eax, [(mp3_synth_win+700h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [mp3_synth_buf+edi*4] ; @@SUM8 @@sum,@@win1,32,@@syn2
-                mov     eax, [(mp3_synth_win+80h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+100h)+edi*4]
-                mov     eax, [(mp3_synth_win+180h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+200h)+edi*4]
-                mov     eax, [(mp3_synth_win+280h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+300h)+edi*4]
-                mov     eax, [(mp3_synth_win+380h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+400h)+edi*4]
-                mov     eax, [(mp3_synth_win+480h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+500h)+edi*4]
-                mov     eax, [(mp3_synth_win+580h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+600h)+edi*4]
-                mov     eax, [(mp3_synth_win+680h)+ebp*4]
-                imul    edx
-                add     ebx, edx
-                mov     edx, [(mp3_synth_buf+700h)+edi*4]
-                                        ; [mp3_synth_buf+syn*4+(nn*64*4)] ; nn=7
-                mov     eax, [(mp3_synth_win+780h)+ebp*4]
-                                        ; [mp3_synth_win+win*4+(nn*64*4)+ww*4] ; nn=7
-                imul    edx
-                add     ebx, edx
-                cmp     ebx, 200000h    ; cmp @@sum,100h SHL (@@out_shift) ; out_shift=13
-                jnb     short .sat
-                sar     ebx, 13         ; sar @@sum,(@@out_shift)
-
-.sat_back:
-                mov     [ecx], bl       ; mov byte ptr [@@dst],@@sum_8bit
-                add     ecx, [mp3_samples_dst_step]
-                add     esi, 4          ; add @@syn1,1 shl rate_shift ; rate_shift=2
-                sub     edi, 4          ; add @@syn2,1 shl rate_shift
-                add     ebp, 4          ; add @@win1,1 shl rate_shift
-                test    ebp, 1Fh        ; test @@win1,1Fh
-                jnz     .samples_lop
-                retn
-
-.sat:
-                sar     ebx, 31         ; sar  @@sum,31 ; FFFFFFFFh,00000000h
-                not     ebx
-                jmp     short .sat_back
-
-.append_copy_to_window:
-                lea     esi, [mp3_synth_buf+eax*4] ; IF SYNTH32
-                lea     edi, [esi+2048] ; [esi+512*4]
-                mov     ecx, 18         ; (12h*4)/4
-                rep movsd
-                jmp     .append_copy_to_window_back
-
-
-; =============== S U B R O U T I N E =======================================
-
-
 mp3_any_init_synth_window:
                 xor     edx, edx        ; index (0..100h)
                 xor     ecx, ecx        ; delta.val
@@ -7883,16 +5416,10 @@ mp3_any_init_synth_window:
                 movsx   ebx, word [mp3_synth_win_src+edx*2]
                 add     ecx, ebx
                 mov     eax, ecx
-                cmp     byte [option_fast], 0
-                jz      short .not_fast
-                sar     eax, 5
 
-.not_fast:
-                cmp	byte [option_fast], 0
-                jnz	short .not_slow
+		; 15/02/2025
                 shl	eax, 14         ; (WFRAC_BITS_slow-WFRAC_BITS_default)
 
-.not_slow:
                 inc     edx             ; index (1..100h)
                 mov     ebx, 200h
                 sub     ebx, edx        ; 1FFh..100h
@@ -7943,26 +5470,6 @@ mp3_any_init_synth_window:
                 lea	edi, [esi+2048] ; [esi+512*4]
                 mov	ecx, 512        ; append another copy
                 rep movsd
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-mp3_init_post_collapse:
-                cmp	byte [option_fast], 0
-                jz	short .not_fast
-                mov	esi, mp3_synth_win
-                mov	edi, esi
-                mov	ecx, 1024       ; 512*(1+LONG_WINDOW)
-
-.collapse_lop:
-                lodsd                   ; collapse 32bit to 16bit
-                                        ; (that's slightly faster due to better caching)
-                stosw
-                loop    .collapse_lop
-
-.not_fast:
                 retn
 
 
@@ -8137,12 +5644,9 @@ mp3_integer_init_mdct_windows:
 
 
 mp3_integer_init_table_4_3:
-                cmp	byte [option_fast], 0
+		; 15/02/2025
                 mov	al, 72          ; 100-6-VFRAC_BITS_slow
-                jz	short .this_vfrac
-                mov	al, 76          ; 100-6-VFRAC_BITS_fast
-
-.this_vfrac:
+ .this_vfrac:
                 mov     [mp3_curr_vfrac_bits], al
                 xor     edi, edi
 
@@ -8644,9 +6148,8 @@ mp3_exclude_id3_and_tag:
                 sub    ecx, edx
                 jnb    short .cont
 		;;;
-                mov     eax, edx
-                call    wr_decimal_eax
-                call    wrcrlf
+		; 16/02/2025
+		sys	_msg, tag_size_err, 255, 0Ch
                 ;;;
 		;sub    ecx, edx
                 ;jb     fatalunexpected
@@ -8656,6 +6159,12 @@ mp3_exclude_id3_and_tag:
                 add     [mp3_tag_size], edx
                 jmp     .no_id3
 
+; ---------------------------------------------------------------------------
+
+		; 16/02/2025
+tag_size_err:	db 0Dh, 0Ah
+		db "Tag Size Error!?"
+		db 0Dh, 0Ah, 0
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -8785,23 +6294,19 @@ mp3_check_xing_info:
                 jnb	short .overflow
                 div	ecx
                 mov	[mp3_bit_rate], eax
-
 .overflow:
                 retn
 
 
 ; =============== S U B R O U T I N E =======================================
 
+		; 16/02/2025
 		; 20/10/2024
 mp3_decode_frame:
                 mov     [mp3_src_remain], ecx
                 mov     [mp3_samples_dst], edi
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported@@@@
-                rdtsc
-                sub     [rdtsc_total], eax
-                sbb     [rdtsc_total+4], edx
-
+	
+		; 16/02/2025
 .no_rdtsc_supported@@@@:
                 call    mp3_search_get_header
                 jc      .error
@@ -8891,7 +6396,8 @@ mp3_decode_frame:
                 add	ebx, 4928       ; $mp3gr_entrysiz*2
                 inc	dword [mp3_curr_channel]
                 mov	eax, [mp3_curr_channel]
-                cmp	eax, [mp3_output_num_channels]
+                ; 16/02/2025
+		cmp	eax, [mp3_num_channels]
                 jb	short .body_channel_lop
                 mov	ebx, [_@@granule_addr]
 
@@ -8909,7 +6415,8 @@ mp3_decode_frame:
                 add     ebx, 4928       ; $mp3gr_entrysiz*2
                 inc	dword [mp3_curr_channel]
                 mov     eax, [mp3_curr_channel]
-                cmp     eax, [mp3_output_num_channels]
+                ; 06/02/2025
+		cmp     eax, [mp3_num_channels]
                 jc      short .cast_channel_lop
 
 .mp3mac_pop_bitstream:
@@ -8925,35 +6432,24 @@ mp3_decode_frame:
                 call	mp3_uncollect_bits
                 cmp	esi, [main_data_pool_wr_ptr]
                 ja	short .error
-                call	dword [mp3_synth_filter_proc] ; synth maths
+                ;call	dword [mp3_synth_filter_proc] ; synth maths
+		; 16/02/2025
+		call	mp3_synth_filter_proc
 
 .skip_decoding:
                 mov     eax, [mp3_extra_bytes]
                 add     [mp3_src_frame_size], eax
                 mov     eax, [mp3_samples_output_size]
-                add     [mp3_total_output_size], eax
+		; 15/02/2025
                 inc     dword [mp3_num_frames_decoded]
-
-.timelog_end:                            ; timelog_end macro ttt
-                test    byte [cpuid_flags], 10h
-                jz      short .no_rdtsc_supported
-                rdtsc                   ; read timestamp counter
-                add     [rdtsc_total], eax
-                adc     [rdtsc_total+4], edx
-		; 22/10/2024
-		clc	
-		; 20/10/2024
+.timelog_end:
+		; 16/02/2025
 .no_rdtsc_supported:
                 ;clc
                 retn
 
 .error:
-                test    byte [cpuid_flags], 10h ; timelog_end rdtsc_total
-                jz      short .no_rdtsc_supported@
-                rdtsc
-                add     [rdtsc_total], eax
-                adc     [rdtsc_total+4], edx
-
+		; 16/02/2025
 		; 20/10/2024
 .no_rdtsc_supported@:
                 mov     eax, [mp3_extra_bytes]
@@ -8964,7 +6460,8 @@ mp3_decode_frame:
 
 ; =============== S U B R O U T I N E =======================================
 
-
+		; 16/02/2025
+		; 15/02/2025
 mp3_init:
                 mov     edi, main_data_pool_start ; = mp3_context_start
                 ;mov    ecx, 74916      ; (mp3_context_end-mp3_context_start)/4
@@ -8983,469 +6480,38 @@ mp3_init:
                 call    mp3_any_init_lsf_sf_expand
                 call    mp3_any_init_huff_tables
                 call    mp3_init_log_constants
-                call    mp3_init_post_collapse
+		; 15/02/2025
                 mov     dword [mp3_initialized], 1
 
 .already_initialized:
-                movzx   eax, byte [option_fast]
-                mov     dword [mp3_bytes_per_sample], 2
-                shl     eax, 1
-                add     al, [option_8bit]
-                test    al, 1
-                jz      short .not_8bit
-                mov     dword [mp3_bytes_per_sample], 1
-.not_8bit:
-                imul    eax, 3
-                add     al, [option_rate_shift]
-                mov     eax, [mp3_synth_filter_procs+eax*4]
-                mov     [mp3_synth_filter_proc], eax
+		; 17/02/2025
+		; 16/02/2025
+		;mov	dword [mp3_bytes_per_sample], 2
+		; 15/02/2025
                 retn
 
 
 ; =============== S U B R O U T I N E =======================================
 
-
+		; 16/02/2025
 mp3_check_1st_frame:
-                call    mp3_exclude_id3_and_tag
-                mov     esi, [stream_pos]
-                mov     ecx, [bytes_left]
-                xor     edi, edi
-                xor     ebp, ebp
-                call    mp3_decode_frame
-                jc     .error
-                call    mp3_check_xing_info
-                mov     edx, txt_file_size ; "file size: "
-                call    wrstr_edx
-                mov     eax, [mp3_file_size]
-                call    wr_decimal_eax_with_thousands_seperator
-                mov     edx, txt_id3_size ; ", id3 size: "
-                call    wrstr_edx
-                mov     eax, [mp3_id3_size]
-                call    wr_decimal_eax_with_thousands_seperator
-                mov     edx, txt_tag_size ; ", tag size: "
-                call    wrstr_edx
-                mov     eax, [mp3_tag_size]
-                call    wr_decimal_eax_with_thousands_seperator
-                call    wrcrlf
-                mov     edx, txt_input ; "input: "
-                call    wrstr_edx
-                mov     eax, [mp3_sample_rate]
-                call    wr_decimal_eax
-                mov     edx, txt_hz ; " hz, "
-                call    wrstr_edx
-                mov     eax, [mp3_src_num_channels]
-                call    wr_decimal_eax
-                mov     edx, txt_channels ; " channels, "
-                call    wrstr_edx
-                mov     eax, [mp3_bit_rate]
-                xor     edx, edx
-                mov     ecx, 1000
-                div     ecx
-                call    wr_decimal_eax
-                mov     edx, txt_kbit_s ; " kbit/s"
-                call    wrstr_edx
-                call    wrcrlf
-                mov     edx, txt_output ; "output: "
-                call    wrstr_edx
-                mov     eax, [mp3_output_sample_rate]
-                call    wr_decimal_eax
-                mov     edx, txt_hz ; " hz, "
-                call    wrstr_edx
-                mov     eax, [mp3_output_num_channels]
-                call    wr_decimal_eax
-                mov     edx, txt_channels ; " channels, "
-                call    wrstr_edx
-                mov     eax, [mp3_bytes_per_sample]
-                shl     eax, 3
-                call    wr_decimal_eax
-                mov     edx, txt_bit ; " bit"
-                call    wrstr_edx
-                call    wrcrlf
-                clc
+		call	mp3_exclude_id3_and_tag
+		mov	esi, [stream_pos]
+		mov	ecx, [bytes_left]
+		xor	edi, edi
+		xor	ebp, ebp
+		call	mp3_decode_frame
+		jc	short .error
+		call	mp3_check_xing_info
+		
+		; 16/02/2025
+		clc
 .error:
-                retn
+		retn
 
 ;.error:
-                ;stc
-                ;retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-;wrchr:
-                ;pusha
-                ;mov     [wrchr_buf], al
-                ;push    0            ; lpOverlapped
-                ;push    diskresult   ; lpNumberOfBytesWritten
-                ;push    1            ; nNumberOfBytesToWrite
-                ;push    wrchr_buf    ; lpBuffer
-                ;push    [std_out]    ; hFile
-                ;call    [WriteFile]
-                ;popa
-                ;retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-
-wrstr_edx:
-                push    eax
-.lop:
-                mov     al, [edx]
-                inc     edx
-                cmp     al, 0
-                jz      short .done
-                call    wrchr
-                jmp     short .lop
-.done:
-                pop     eax
-                retn
-
-; =============== S U B R O U T I N E =======================================
-
-
-wrcrlf:
-                push    eax
-                mov     al, 0Dh
-                call    wrchr
-                mov     al, 0Ah
-                call    wrchr
-                pop     eax
-                retn
-
-; =============== S U B R O U T I N E =======================================
-
-
-wrspc:
-                push    eax
-                mov     al, 20h
-                call    wrchr
-                pop     eax
-                retn
-
-; =============== S U B R O U T I N E =======================================
-
-
-wrcomma:
-                push    eax
-                mov     al, ','
-                call    wrchr
-                pop     eax
-                retn
-
-; =============== S U B R O U T I N E =======================================
-
-
-wr_decimal_eax_with_thousands_seperator:
-                push    ecx
-                mov     cx, 2
-                jmp     short wr_decimal_eax_inj
-
-; =============== S U B R O U T I N E =======================================
-
-
-wr_decimal_eax:
-                push    ecx
-                xor     ecx, ecx
-
-wr_decimal_eax_inj:
-                push    eax
-                push    ebx
-                push    edx
-                mov     ebx, 1000000000 ; nine zeroes (32bit max 4.294.967.296)
-
-.dezlop:
-                dec     cl
-                jnz     short .no_thousands
-                mov     cl, 3
-                cmp     ch, 0
-                jz      short .no_thousands
-                call    wrcomma
-
-.no_thousands:
-                xor     edx, edx
-                div     ebx
-                cmp     ebx, 1
-                jz      short .force_last_zero
-                or      ch, al
-                jz      short .skip_lead_zero
-
-.force_last_zero:
-                add     al, 30h
-                call    wrchr
-
-.skip_lead_zero:
-                push    edx
-                mov     eax, ebx
-                mov     ebx, 10
-                xor     edx, edx
-                div     ebx
-                cmp     eax, 0
-                mov     ebx, eax
-                pop     eax
-                jnz     short .dezlop
-                pop     edx
-                pop     ebx
-                pop     eax
-                pop     ecx
-                retn
-
-; =============== S U B R O U T I N E =======================================
-
-
-wrdigital:
-                push    eax
-                and     al, 0Fh
-                cmp     al, 9
-                jbe     short .this
-                add     al, 7
-
-.this:
-                add     al, 30h
-                call    wrchr
-                pop     eax
-                retn
-
-; =============== S U B R O U T I N E =======================================
-
-
-wrhexal:
-                ror     al, 4
-                call    wrdigital
-                ror     al, 4
-                jmp     short wrdigital
-
-; =============== S U B R O U T I N E =======================================
-
-
-wrhexax:
-                ror     ax, 8
-                call    wrhexal
-                ror     ax, 8
-                jmp     short wrhexal
-
-; =============== S U B R O U T I N E =======================================
-
-
-wrhexeax:
-                ror     eax, 10h
-                call    wrhexax
-                ror     eax, 10h
-                jmp     short wrhexax
-
-; =============== S U B R O U T I N E =======================================
-
-if 0
-
-get_commandline:
-                call    [GetCommandLineA]
-                mov     esi, eax
-                mov     edi, cmdline_buf
-                mov     ecx, 1024       ; cmdline_max
-
-.get_cmdline_lop:
-                lodsb
-                cmp     al, 0
-                stosb
-                loopne  .get_cmdline_lop
-                mov     byte [edi-1], 0
-                mov     esi, cmdline_buf
-                mov     edi, cmdline_buf
-                call    _@@get_item     ; get/skip name of the executable itself
-
-.get_items_lop:
-                call    _@@get_item
-                mov     al, [ebx]
-                cmp     al, 0
-                jz      .done
-                cmp     al, '/'
-                jz      short .switch
-                cmp     al, '-'
-                jz      short .switch
-                mov     eax, [edi-5]
-                or      eax, 20202000h
-                ;cmp    eax, 'vaw.'     ; ".wav"
-                cmp     eax, '.wav'     ; FASM & NASM syntax
-                jnz     short .not_wav_name
-                mov     [mp3_dst_fname], ebx
-                jmp     short .get_items_lop
-
-.not_wav_name:
-                mov     eax, [edi-5]
-                or      eax, 20202000h
-                ;cmp    eax, 'mcp.'     ; ".pcm"
-                cmp     eax, '.pcm'     ; FASM & NASM syntax
-                jnz     short .not_pcm_name
-                mov     [mp3_pcm_fname], ebx
-                jmp     short .get_items_lop
-
-.not_pcm_name:
-                mov     [mp3_src_fname], ebx
-                jmp     short .get_items_lop
-
-.switch:
-                ;cmp	dword [ebx+1], 'onom' ; "mono"
-                cmp	dword [ebx+1], 'mono'
-                jnz     short .not_switch_mono
-                mov	byte [option_mono], 1
-                jmp	short .get_items_lop
-
-.not_switch_mono:
-                ;cmp	dword [ebx+1], 'tsaf' ; "fast"
-                cmp	dword [ebx+1], 'fast' ; FASM & NASM syntax
-                jnz	short .not_fast_option
-                mov	byte [option_fast], 1
-                jmp	short .get_items_lop
-
-.not_fast_option:
-                ;cmp    dword [ebx+1], 'tib8' ; "8bit"
-                cmp     dword [ebx+1], '8bit'
-                jnz     short .not_switch_8bit
-                mov     [option_8bit], 1
-                jmp     .get_items_lop
-
-.not_switch_8bit:
-                ;cmp    dword [ebx+1], 'flah' ; "half"
-                cmp     dword [ebx+1], 'half'
-                jnz     short .not_switch_half
-                mov     [option_rate_shift], 1
-                jmp     .get_items_lop
-
-.not_switch_half:
-                ;cmp    dword [ebx+1], 'rauq' ; "quar"
-                cmp     dword [ebx+1], 'quar'
-                jnz     short .not_switch_quarter
-                mov     [option_rate_shift], 2
-                jmp     .get_items_lop
-
-.not_switch_quarter:
-                ;cmp    dword [ebx+1], 'tset' ; "test"
-                cmp     dword [ebx+1], 'test'
-                jnz     short .not_switch_test
-                mov     byte [option_test], 1
-                jmp     .get_items_lop
-
-.not_switch_test:
-                jmp     short .help
-
-.done:
-                cmp	dword [mp3_src_fname], 0
-                jz      short .help
-                ;;; Erdogan Tan - 17/10/2024
-                mov     edx, txt_ctrlc
-                call    wrstr_edx
-                ;;;
-                mov     edx, txt_file ; "file: "
-                call    wrstr_edx
-                mov     edx, [mp3_src_fname]
-                call    wrstr_edx
-                call    wrcrlf
-                clc
-                retn
-
-.help:
-                ;;; Erdogan Tan - 17/10/2024
-                mov     edx, txt_about
-                call    wrstr_edx
-                ;;;
-                mov     edx, txt_help ; "usage: mp3play input.mp3 [output.wav] ["...
-                call    wrstr_edx
-                stc
-                retn
-
-end if
-
-; =============== S U B R O U T I N E =======================================
-
-if 0
-
-_@@get_item:
-                lodsb
-                dec     al
-                cmp     al, 1Fh         ; 20-1
-                jbe     short _@@get_item ; _@@skip_spc_lop
-                dec     esi
-                mov     ebx, edi
-                mov     ah, 0           ; flag initially not quoted
-
-.char_lop:
-                lodsb
-                cmp     al, '"'
-                jnz     short .no_quote
-                xor     ah, 1
-                jmp     short .char_lop
-
-.no_quote:
-                stosb
-                cmp     al, 0
-                jz      short .src_end
-                cmp     al, 20h
-                ja      short .char_lop
-                cmp     ah, 0           ; ignore spaces if inside "quoted area"
-                jnz     short .char_lop
-                mov     byte [edi-1], 0 ; eol (replace space by 00h)
-                retn
-
-.src_end:
-                dec     esi
-                retn
-
-end if
-
-; =============== S U B R O U T I N E =======================================
-
-
-if 0
-
-open_and_mmap_the_file:
-                push    0               ; hTemplateFile
-                push    0               ; dwFlagsAndAttributes
-                push    3               ; dwCreationDisposition
-                push    0               ; lpSecurityAttributes
-                push    1               ; dwShareMode
-                push    80000000h       ; dwDesiredAccess
-                push    [mp3_src_fname] ; lpFileName
-                call    [CreateFileA]
-                mov     [hFile], eax
-                cmp     eax, 0FFFFFFFFh ; INVALID_HANDLE_VALUE
-                jz      short .not_found
-                push    0               ; lpFileSizeHigh
-                push    [hFile]      ; hFile
-                call    [GetFileSize]
-                mov     [mp3_file_size], eax
-                mov     [bytes_left], eax
-                push    0               ; lpName
-                push    0               ; dwMaximumSizeLow
-                push    0               ; dwMaximumSizeHigh
-                push    2               ; flProtect
-                push    0               ; lpFileMappingAttributes
-                push    [hFile]      ; hFile
-                call    [CreateFileMappingA]
-                mov     [hMap], eax
-                push    0               ; dwNumberOfBytesToMap
-                push    0               ; dwFileOffsetLow
-                push    0               ; dwFileOffsetHigh
-                push    4               ; dwDesiredAccess
-                push    [hMap]       ; hFileMappingObject
-                call    [MapViewOfFile]
-                mov     [stream_start], eax
-                mov     [stream_pos], eax
-                mov     esi, [stream_start]
-                mov     ecx, [bytes_left]
-
-.lll:
-                lodsb
-                loop    .lll
-                clc
-                retn
-
-.not_found:
-                mov     edx, txt_not_found ; "cannot open source file\r\n"
-                call    wrstr_edx
-                stc
-                retn
-
-end if
+		;stc
+		;retn
 
 
 ; =============== S U B R O U T I N E =======================================
@@ -9466,321 +6532,8 @@ mp3_plain_test_without_output:
                 add     [stream_pos], eax
                 sub     [bytes_left], eax
                 jmp     short mp3_plain_test_without_output
-
 .exit:
                 retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-mp3_cast_to_wav_file:
-                call	mp3_create_wav_file
-		; 20/10/2024
-		jnc	short .lop
-		mov	ebx, -1
-		jmp	ExitProcess@ ; 13/01/2025
-.lop:
-                pusha
-                mov	esi, [stream_pos]
-                mov	ecx, [bytes_left]
-                mov	edi, sample_buffer
-                xor	ebp, ebp
-                call	mp3_decode_frame
-                popa
-                jc	short .exit
-                mov	eax, [mp3_src_frame_size]
-                cmp	eax, 0
-                jz	short .exit
-                add	[stream_pos], eax
-                sub	[bytes_left], eax
-                ;push	0          ; lpOverlapped
-                ;push	diskresult ; lpNumberOfBytesWritten
-                push	dword [mp3_samples_output_size] ; nNumberOfBytesToWrite
-                push	sample_buffer ; lpBuffer
-                push	dword [mp3_wav_handle] ; hFile
-                ;call	[WriteFile]
-		;;;
-		; 20/10/2024
-		call	WriteFile
-		jc	short .exit
-		;;;
-                mov	eax, [mp3_samples_output_size]
-                add	dword [mp3_wav_header+4], eax
-                add	dword [mp3_wav_header+28h], eax
-                jmp	short .lop
-
-.exit:
-                call	mp3_close_wav_file
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-
-mp3_create_wav_file:
-                mov     eax, [mp3_output_sample_rate]
-                mov     ecx, [mp3_output_num_channels]
-                mov     edx, [mp3_bytes_per_sample]
-                mov     word [mp3_wav_header+16h], cx
-                mov     dword [mp3_wav_header+18h], eax
-                imul    ecx, edx
-                imul    eax, ecx
-                shl     edx, 3
-                mov     dword [mp3_wav_header+1Ch], eax
-                mov     word [mp3_wav_header+20h], cx
-                mov     word [mp3_wav_header+22h], dx
-                ;push   0               ; hTemplateFile
-                ;push   80h             ; dwFlagsAndAttributes
-                ;push   2               ; dwCreationDisposition
-                ;push   0               ; lpSecurityAttributes
-                ;push   0               ; dwShareMode
-                ;push   0C0000000h      ; dwDesiredAccess
-                push    dword [mp3_dst_fname] ; lpFileName
-                ;call   [CreateFileA]
-		;;;
-		; 20/10/2024
-		call	CreateFile
-		jnc	short .ok
-		retn
-.ok:
-		;;;
-                mov     [mp3_wav_handle], eax
-                ; 20/10/2024
-		;call   mp3_write_wav_header
-                ;retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-mp3_write_wav_header:
-                ;push	0               ; lpOverlapped
-                ;push	diskresult      ; lpNumberOfBytesWritten
-                push	44 ; 2Ch        ; nNumberOfBytesToWrite
-                push	mp3_wav_header  ; lpBuffer
-                push	dword [mp3_wav_handle] ; hFile
-                ;call	[WriteFile]
-                ;;;
-		; 20/10/2024
-                call	WriteFile
-                ;;;
-		retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-mp3_close_wav_file:
-                push	0               ; dwMoveMethod
-                ;push	0               ; lpDistanceToMoveHigh
-                push	0               ; lDistanceToMove
-                push	dword [mp3_wav_handle] ; hFile
-                ;call	[SetFilePointer]
-		;;;
-		; 20/10/2024
-		call	SetFilePointer
-		;;;
-                call	mp3_write_wav_header
-                push	dword [mp3_wav_handle] ; hObject
-                ;call	[CloseHandle]
-		;;;
-		; 20/10/2024
-		call	CloseFile
-		;;;
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-mp3_verify_pcm_file:
-                call    mp3_open_pcm_file
-		;;;
-		; 20/10/2024
-		jnc	short .verify
-		retn	; nothing to do (return without error msg)
-.verify:
-		;;;
-                mov	dword [_@@max_diff], 0
-                mov	dword [_@@avg_diff], 0
-                mov	dword [_@@avg_diff+4], 0
-                mov	dword [pcm_filepos], 0
-
-.lop:
-                pusha
-                mov     esi, [stream_pos]
-                mov     ecx, [bytes_left]
-                mov     edi, sample_buffer
-                xor     ebp, ebp
-                call    mp3_decode_frame
-                popa
-                jb      .exit
-                mov     eax, [mp3_src_frame_size]
-                cmp     eax, 0
-                jz      .exit
-                xor     eax, eax
-                cmp     dword [mp3_output_num_channels], 2
-                jb      short .this_mono_convert
-                movzx   eax, byte [option_mono]
-
-.this_mono_convert:
-                mov	[_@@mono_convert], eax
-                mov	cl, [option_rate_shift]
-                mov	eax, 2
-                shl	eax, cl
-                mov	[_@@pcm_steps], ax
-                mov	[_@@pcm_steps+2], ax
-                cmp	dword [mp3_output_num_channels], 2
-                jb	short .these_steps
-                mov	word [_@@pcm_steps], 2
-                lea     eax, [eax*2-2] ; [0FFFFFFFEh+eax*2]
-                mov     [_@@pcm_steps+2], ax
-
-.these_steps:
-                mov     eax, [mp3_samples_output_size]
-                mov     cl, [option_rate_shift]
-                add     cl, [option_8bit]
-                add     cl, byte [_@@mono_convert]
-                shl     eax, cl
-                ;push   0               ; lpOverlapped
-                ;push   diskresult      ; lpNumberOfBytesRead
-                push    eax             ; nNumberOfBytesToRead
-                push    (sample_buffer+1200h) ; sample_buffer+MP3_MAX_OUTPUT_SIZE
-                push    dword [mp3_pcm_handle] ; hFile
-                ;call   [ReadFile]
-                ;;;
-		; 20/10/2024
-		call	ReadFile
-		jnc	short .pcm_read_ok
-		; Note: File read error msg has been displayed
-		call	mp3_close_pcm_file
-		retn
-.pcm_read_ok:
-		;;;
-		mov     ecx, [mp3_samples_output_size]
-                shr     ecx, 1
-                jz      .compare_done
-                mov     esi, sample_buffer ; decoded .mp3
-                mov     edi, (sample_buffer+1200h) ; loaded .pcm
-
-.compare_lop:
-                movsx   edx, word [edi]
-                cmp     dword [_@@mono_convert], 0
-                jz      short .no_mono_convert
-                movsx   eax, word [edi+2]
-                add     edx, eax
-                sar     edx, 1
-
-.no_mono_convert:
-                cmp	byte [option_8bit], 0
-                jnz	short .compare_8bit
-                movsx	eax, word [esi] ; get 16bit from decoded .mp3
-                add	esi, 2
-                jmp	short .compare_this
-
-.compare_8bit:
-                movzx   eax, byte [esi]
-                inc     esi             ; convert .pcm
-                add     edx, 8000h      ; make unsigned
-                sar     edx, 8          ; div 100h
-                adc     dl, 0           ; round up
-                sbb     dl, 0           ; undo on unsigned overflow
-
-.compare_this:
-                sub     eax, edx
-                jns     short .compare_abs ; calc difference
-                neg     eax
-
-.compare_abs:
-                add     [_@@avg_diff], eax
-                adc     dword [_@@avg_diff+4], 0
-                cmp     eax, [_@@max_diff]
-                jb      short .not_max
-                mov     [_@@max_diff], eax
-                mov     edx, [pcm_filepos]
-                mov     [_@@worst_pcm_filepos], edx
-                mov     edx, [stream_pos]
-                sub     edx, [stream_start]
-                mov     [_@@worst_mp3_filepos], edx
-
-.not_max:
-                movzx   eax, word [_@@pcm_steps]
-                ror     dword [_@@pcm_steps], 16 ; next .pcm addr
-                add     edi, eax
-                add     [pcm_filepos], eax
-                dec     ecx
-                jnz    .compare_lop
-
-.compare_done:
-                mov     eax, [mp3_src_frame_size]
-                add     [stream_pos], eax
-                sub     [bytes_left], eax
-                jmp     .lop
-
-.exit:
-                call    mp3_close_pcm_file
-                mov     edx, _@@txt_verify1 ; "verify max difference = "
-                call    wrstr_edx
-                mov     eax, [_@@max_diff]
-                call    wr_decimal_eax
-                mov     edx, _@@txt_verify1_at_mp3 ; " at mp3:"
-                call    wrstr_edx
-                mov     eax, [_@@worst_mp3_filepos]
-                call    wrhexeax
-                mov     edx, _@@txt_verify2 ; ", average difference = "
-                call    wrstr_edx
-                mov     eax, [_@@avg_diff]
-                mov     edx, [_@@avg_diff+4]
-                mov     ecx, [mp3_total_output_size]
-                shr     ecx, 1
-                div     ecx
-                call    wr_decimal_eax
-                mov     al, '.'
-                call    wrchr
-                mov     eax, 10
-                mul     edx             ; fraction*10
-                div     ecx
-                call    wrdigital       ; show fraction of average difference
-                call    wrcrlf
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-mp3_open_pcm_file:
-                ;push	0               ; hTemplateFile
-                ;push	80h             ; dwFlagsAndAttributes
-                ;push	3               ; dwCreationDisposition
-                ;push	0               ; lpSecurityAttributes
-                ;push	0               ; dwShareMode
-                ;push	80000000h       ; dwDesiredAccess
-                push	dword [mp3_pcm_fname] ; lpFileName
-                ;call	[CreateFileA]
-		;;;
-		; 20/10/2024
-		call	OpenFile
-		;jc	short .return
-		;;;
-                mov	[mp3_pcm_handle], eax
-;.return:
-                retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-mp3_close_pcm_file:
-                push	dword [mp3_pcm_handle] ; hObject
-                ;call	[CloseHandle]
-                ;retn
-		;;;
-		; 20/10/2024
-		call	CloseFile
-		;;;
-		retn
 
 
 ; =============== S U B R O U T I N E =======================================
@@ -9805,123 +6558,6 @@ wrchr:
 		;pop	ebx
 		retn
 
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-get_commandline:
-		; 21/10/2024
-		pop	ebp ; near call return address
-               	; esp = command line start address
-		;mov	[command_line],esp
-		pop	ecx	; argc  ; number of arguments
-		; esp = pointer to argument 1 ; argv[0]
-		dec	ecx
-		jz	.help
-		pop	eax ; argument 1 (PRG file name)
-		pop	esi ; argument 2 (must be input file name)
-		mov     edi, cmdline_buf
-.get_item:
-		mov	ebx, edi
-.char_lop:
-                lodsb
-		stosb
-                cmp     al, 0
-                jnz 	short .char_lop
-		
-                mov     al, [ebx]
-                cmp     al, '/'
-                jz      short .switch
-                cmp     al, '-'
-                jz      short .switch
-                mov     eax, [edi-5]
-                or      eax, 20202000h
-                cmp     eax, '.wav'     ; FASM & NASM syntax
-                jnz     short .not_wav_name
-                mov     [mp3_dst_fname], ebx
-.get_items_lop:
-		dec	ecx
-		jz	.done
-		pop	esi   ; next argument
-		jmp     short .get_item
-
-.not_wav_name:
-                mov     eax, [edi-5]
-                or      eax, 20202000h
-                cmp     eax, '.pcm'     ; FASM & NASM syntax
-                jnz     short .not_pcm_name
-                mov     [mp3_pcm_fname], ebx
-                jmp     short .get_items_lop
-
-.not_pcm_name:
-                mov     [mp3_src_fname], ebx
-                jmp     short .get_items_lop
-
-.switch:
-                cmp	dword [ebx+1], 'mono'
-                jnz	short .not_switch_mono
-                mov	byte [option_mono], 1
-                jmp	short .get_items_lop
-
-.not_switch_mono:
-                cmp	dword [ebx+1], 'fast' ; FASM & NASM syntax
-                jnz	short .not_fast_option
-                mov	byte [option_fast], 1
-                jmp	short .get_items_lop
-
-.not_fast_option:
-                cmp	dword [ebx+1], '8bit'
-                jnz	short .not_switch_8bit
-                mov	byte [option_8bit], 1
-                jmp	short .get_items_lop
-
-.not_switch_8bit:
-                cmp	dword [ebx+1], 'half'
-                jnz	short .not_switch_half
-                mov	byte [option_rate_shift], 1
-                jmp	short .get_items_lop
-
-.not_switch_half:
-                cmp	dword [ebx+1], 'quar'
-                jnz	short .not_switch_quarter
-                mov	byte [option_rate_shift], 2
-                jmp	.get_items_lop
-
-.not_switch_quarter:
-                cmp	dword [ebx+1], 'test'
-                jnz	short .not_switch_test
-                mov	byte [option_test], 1
-                jmp	.get_items_lop
-
-.done:
-                cmp	dword [mp3_src_fname], 0
-                jz	short .help
-                ;;; Erdogan Tan - 17/10/2024
-                ;mov	edx, txt_ctrlc
-                ;call	wrstr_edx
-		; 20/10/2024
-		sys	_msg, txt_ctrlc, txt_ctrlc_size, 0Fh ; white
-                ;;;
-                mov	edx, txt_file ; "file: "
-                call	wrstr_edx
-                mov	edx, [mp3_src_fname]
-                call	wrstr_edx
-                call	wrcrlf
-                clc
-		push	ebp	; return address
-                retn
-
-.not_switch_test:
-.help:
-                ;;; Erdogan Tan - 17/10/2024
-                mov	edx, txt_about
-                call	wrstr_edx
-                ;;;
-                mov	edx, txt_help ; "usage: mp3play input.mp3 [output.wav] ["...
-                call	wrstr_edx
-                stc
-		push	ebp	; return address
-                retn
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -9952,6 +6588,8 @@ set_break:
 
 ; =============== S U B R O U T I N E =======================================
 
+		; 16/02/2025
+		; 15/02/2025 (tmp3play.s)
 		; 14/02/2025 (mp3play6.s)
 		; 01/02/2025 (mp3play4.s)	
 		; 20/10/2024 (mp3play1.s)
@@ -9962,7 +6600,8 @@ open_and_mmap_the_file:
 		; Open File
 		; ebx = pointer to filename
 		; ecx = open mode, 0 = read
-             	sys	_open, [mp3_src_fname], 0
+		; 15/02/2025
+             	sys	_open, mp3_file_name, 0
 		jc	short .not_found
 
                 mov     [hFile], eax
@@ -10033,58 +6672,32 @@ open_and_mmap_the_file:
 		; Close file
 		; ebx = file handle (file descriptor)
 		;sys	_close, [hFile]
- 		sys	_close
+		sys	_close
 
-		mov	edx, txt_read_err
+		; 16/02/2025
+		mov	esi, txt_read_err
 		jmp	short .r_err_msg
 .ok:
                 mov     [bytes_left], eax ; read count
+		
+		; 16/02/2025
+		sys	_close
 		retn
 .not_found:
-                mov     edx, txt_not_found ; "cannot open source file\r\n"
+		; 16/02/2025
+                mov     esi, txt_not_found ; ("Error: File not found !")
 .r_err_msg:
-                call    wrstr_edx
-                stc
-                retn
+		;call	print_err_msg
+		;;stc
+		;retn
+		; 16/02/2025
+		jmp	print_err_msg
 
-;txt_read_err	db 'File read error!',0Dh,0Ah,0
+; ---------------------------------------------------------------------------
 
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-print_msg:
-		; TRDOS 386 system call
-		; write/display message on screen
-		; ebx = ASCIIZ message (text) address
-		; ecx = max. message length (stop count before char zero)
-		; edx = character color (CGA)
-		mov	ecx, 255
-		mov	edx, 0Bh ; DL ; cyan
-		sys	_msg
-		retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-GetTickCount:
-		; TRDOS 386 system call
-		; get current time, get tick count
-		; ebx = 4 -> get count of system timer ticks
-		sys	_time, 4
-		; eax = system timer ticks (18.2 ticks per second)
-		mov	edx, 549254165	; 10^10/18.2
-		mul	edx
-		; edx:eax = milliseconds * 10^7
-		mov	ebx, 10000000
-		div	ebx		; 10^7
-		; eax = milliseconds
-		cmp	edx, 5000000	; 10^7/2
-		jb	short .ok
-		inc	eax		; round up
-.ok:
-		retn
+		; 16/02/2025
+txt_read_err:
+		db 'File read error !', 0Dh, 0Ah, 0
 
 
 ; =============== E X I T ===================================================
@@ -10101,158 +6714,11 @@ ExitProcess@:	; 13/01/2025
 		;jmp	short hang
 
 
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-WriteFile:
-		pop	eax ; near call return address
-		pop	ebx
-		pop	ecx
-		pop	edx
-		push	eax
-		; TRDOS 386 system call
-		; Write file
-		; ebx = file handle (file descriptor)
-		; ecx = buffer address
-		; edx = byte count
-		sys	_write
-		jnc	short .ok
-		cmp	eax, edx
-		jnb	short .ok
-		;or	eax, eax
-		;jnz	short .ok
-
-		mov	edx, txt_write_err
-                call    wrstr_edx
-                stc
-.ok:
-                retn
-
-txt_write_err	db 'File write error!',0Dh,0Ah,0
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-CreateFile:
-		pop	eax ; near call return address
-		pop	ebx
-		push	eax
-		; TRDOS 386 system call
-		; Create file
-		; ebx = (ASCIIZ) file name address
-		; ecx = mode
-		xor	ecx, ecx ; CL ; mov ecx, 0 ; ordinary file
-		sys	_creat
-		jnc	short .ok ; eax = file handle
-
-		mov	edx, txt_create_err
-                call    wrstr_edx
-                stc
-.ok:
-		retn
-
-txt_create_err	db 'File create error!',0Dh,0Ah,0
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-OpenFile:
-		pop	eax ; near call return address
-		pop	ebx
-		push	eax
-		; TRDOS 386 system call
-		; Open file
-		; ebx = (ASCIIZ) file name address
-		; ecx = mode
-		xor	ecx, ecx ; CL ; mov ecx, 0 ; ordinary file
-		sys	_open
-		;jnc	short .ok ; eax = file handle
-		;
-		;mov	edx, txt_open_err
-                ;call   wrstr_edx
-                ;stc
-;.ok:
-		retn
-
-;txt_open_err	db 'File not found!',0Dh,0Ah,0
-		;db 'File open error!',ODh,0Ah,0
-	 
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-SetFilePointer:
-		pop	eax ; near call return address
-		pop	ebx
-		pop	ecx
-		pop	edx
-		push	eax
-		; TRDOS 386 system call
-		; Set file offset pointer  ; sysseek
-		; ebx = file handle (file descriptor)
-		; ecx = offset
-		; edx = switch, DL = 0 = from the start of file
-		;		     1 = from the current offset
-		;		     2 = from the end of file
-		sys	_seek
-		; eax = (value of) new offset pointer
-
-		retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-ReadFile:
-		pop	eax ; near call return address
-		pop	ebx
-		pop	ecx
-		pop	edx
-		push	eax
-		; TRDOS 386 system call
-		; Read file
-		; ebx = file handle (file descriptor)
-		; ecx = buffer address
-		; edx = byte count
-		sys	_read
-		jnc	short .ok
-		cmp	eax, edx
-		jnb	short .ok
-		;or	eax, eax
-		;jnz	short .ok
-
-		mov	edx, txt_read_err
-                call    wrstr_edx
-                stc
-.ok:
-                retn
-
-txt_read_err	db 'File read error!',0Dh,0Ah,0
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 20/10/2024
-CloseFile:
-		pop	eax ; near call return address
-		pop	ebx
-		push	eax
-		; TRDOS 386 system call
-		; Close file
-		; ebx = file handle (file descriptor)
-		sys	_close
-
-		retn
-
-
 ; ---------------------------------------------------------------------------
 ; TRDOS 386 Audio System Functions
 ; ---------------------------------------------------------------------------
 
 ; =============== S U B R O U T I N E =======================================
-
 
 		; 10/01/2025
 		; 20/10/2024
@@ -10350,10 +6816,14 @@ detect_enable_audio_device:
 		mov	byte [audio_hardware], 4 ; HDA
 		retn
 .err:
-		mov	edx, txt_audio_nf_err
-                call    wrstr_edx
-                stc
-		retn
+		; 16/02/2025
+		mov	esi, txt_audio_nf_err
+		;call	print_err_msg
+		;;stc
+		;retn
+		jmp	print_err_msg	
+
+; ---------------------------------------------------------------------------
 
 txt_audio_nf_err: db 'Proper audio hardware not found!',0Dh,0Ah,0
 
@@ -10361,7 +6831,7 @@ txt_audio_nf_err: db 'Proper audio hardware not found!',0Dh,0Ah,0
 ; =============== CONSTANT ==================================================
 
 		; 21/10/2024
-MP3_MAX_OUTPUT_SIZE equ 2*2*18*32*2
+;MP3_MAX_OUTPUT_SIZE equ 2*2*18*32*2
     ; = 1200h = 4608 decimal = 2 channels, 2 granules, 18*32, 2 byte (16bit)
 
 
@@ -10374,8 +6844,7 @@ MP3_MAX_OUTPUT_SIZE equ 2*2*18*32*2
 audio_system_init:
 		; 28/01/2025
 		mov	eax, [mp3_samples_output_size]
-; 29/01/2025
-if 1
+
 		; 29/01/2025
 		mov	byte [blocks], 1
 		;
@@ -10412,29 +6881,6 @@ if 1
 		; 29/01/2025
 		;cmp	byte [audio_hardware], 1 ; SB16
 		;jne	short .bufaloc
-.asi@@@:
-; 29/01/2025
-;if 0
-;		; 10/01/2025
-;		cmp	eax, 32768
-;		jna	short .bufaloc
-;		; sample_buffer_size = 36864 bytes ; 8 blocks
-;		;sub	eax, MP3_MAX_OUTPUT_SIZE
-;		; eax = 32256 ; 7 blocks
-;		; 10/01/2025
-;		sub	eax, [mp3_samples_output_size]
-;		dec	byte [blocks]
-;		;;;
-;		; 11/01/2025
-;		;test	byte [blocks], 1
-;		;jz	short .asi@@@
-;		;dec	byte [blocks] ; even number
-;		;sub	eax, [mp3_samples_output_size]
-;		;;;
-;		jmp	short .asi@@@
-;end if
-end if
-
 .bufaloc:
 		; TRDOS 386 system call
 		; sysaudio
@@ -10474,20 +6920,6 @@ end if
 		; 24/01/2025
 		;retn
 
-; 27/01/2025
-;		;;;; 26/01/2025
-;		cmp	byte [audio_hardware], 1 ; SB16 ?
-;		jne	short .smvol ; no
-;
-;		; 26/01/2025
-;		; Map system DMA buffer to user's memory space
-;		; (for -fast- sound data graphics display)
-;		mov	eax, [buffer_size]
-;		shl	eax, 1 ; dma buff size is 2 * user's buff size
-;		sys	_audio, 0D00h, eax, dmabuffer
-;.smvol:
-;		;;;;
-
 		mov	al, [volume_level]
 		;call	SetMasterVolume@
 		;retn
@@ -10498,11 +6930,14 @@ init_error:
 		; 27/01/2025
 		call	set_text_mode
 
-		; 13/01/2025
-		mov	edx, txt_audio_init_err
-                call    wrstr_edx
-                stc
-		retn
+		; 16/02/2025
+		mov	esi, txt_audio_init_err
+		;call	print_err_msg
+		;;stc
+		;retn
+		jmp	print_err_msg
+
+; ---------------------------------------------------------------------------
 
 txt_audio_init_err: db 'Audio hardware initialization error!',0Dh,0Ah,0
 
@@ -10585,7 +7020,9 @@ setvolume_ok:
 
 ; =============== S U B R O U T I N E =======================================
 
-		; 13/02/2025
+		; 17/02/2025
+		; 16/02/2025 (tmp3play.s)	
+		; 13/02/2025 (mp3play6.s)
 		; 26/01/2025
 		; 23/01/2025
 		; 22/01/2025
@@ -10595,14 +7032,18 @@ setvolume_ok:
 		; 21/10/2024
 mp3_cast_to_speaker:
 		; Start	to play
-		mov	eax, [mp3_bytes_per_sample]
-		;shr	al, 1 ; 8 -> 0, 16 -> 1
-		;shl	al, 1 ; 16 -> 2, 8 -> 0
-		and	al, 2 ; 22/10/2024
-		mov	ebx, [mp3_output_num_channels]
+		; 17/02/2025
+		;mov	eax, [mp3_bytes_per_sample]
+		;;shr	al, 1 ; 8 -> 0, 16 -> 1
+		;;shl	al, 1 ; 16 -> 2, 8 -> 0
+		;and	al, 2 ; 22/10/2024
+		; 16/02/2025
+		mov	ebx, [mp3_num_channels]
 		dec	ebx
-		or	bl, al
-		mov	ecx, [mp3_output_sample_rate]
+		;or	bl, al
+		; 17/02/2025 ([mp3_bytes_per_sample] = 2)
+		or	bl, 2 ; 16bit
+		mov	ecx, [mp3_sample_rate]
 		mov	bh, 4 ; start to play
 
 		; 13/01/2025
@@ -10657,13 +7098,7 @@ mp3_cast_to_speaker_@:
 		call	checkUpdateEvents
 		jc	short .playback_end
 
-		;mov	ax, 4E30h
-		;mov	[0B8000h], ax
-		; 26/01/2025
-		;mov	bx, 0C30h
-		; 13/02/2025
-		mov	dx, 0C30h
-		call	display_indicator
+		; 16/02/2025
 		jmp	short .playback_lop
 .pb_l_@:
 		;;;; ---------------------
@@ -10687,86 +7122,22 @@ mp3_cast_to_speaker_@:
 		; 12/01/2025
 		;call	try_enqueue_all_blocks
 
-		; 28/01/2025
-		mov	bl, [counter]
-		inc	byte [counter]
-		and	bl, 7
-		jnz	short .playback_lop
-
-		; 15/01/2025
-		;cmp	byte [blocks], 0 ; interpolation ?
-		;jna	short .interpolated ; yes
-		; 27/01/2025
-		cmp	byte [interpolation], 0
-		ja	short .interpolated
-
-		; 15/01/2025
-		;mov	ah, 4Eh ; red background, yellow font
-		; 26/01/2025
-		;mov	bh, 0Ch ; red background
-		; 13/02/2025
-		mov	dh, 0Ch
-.indicator:
-		;;; 10/01/2025
-		;mov	al, [half_buffer]
-		;xor	byte [half_buffer], 1
-		;;mov	ah, 4Eh
-		;add	al, '1'
-		;mov	[0B8000h], ax
-		; 26/01/2025
-		;mov	bl, [half_buffer]
-		;xor	byte [half_buffer], 1
-		;add	bl, '1'
-		;; bh = color, bl = character (1,2)
-		; 13/02/2025
-		mov	dl, [half_buffer]
-		xor	byte [half_buffer], 1
-		add	dl, '1'
-		call	display_indicator
-		;;;
+		; 16/02/2025
 		jmp	short .playback_lop
-
-.interpolated:
-		; 15/01/2025
-		; (a solution for very fast indicator digit change)
-		; (8 to 1)
-		;inc	byte [counter]
-		;mov	al, [counter]
-		;and	al, 7
 		
-		; 28/01/2025
-		; 26/01/2025
-		;mov	bl, [counter]
-		;inc	byte [counter]
-		;and	bl, 7
-		;jnz	short .playback_lop
-
-		;mov	ah, 1Eh ; blue background, yellow font
-		; 27/01/2025
-		;;mov	bh, 09h ; blue background
-		; 13/02/2025
-		;mov	bh, 01h ; dark blue background
-		mov	dh, 01h
-		jmp	short .indicator
-
 		; 21/01/2025
 		;;;; ---------------------
 .pb_l_@@:
 		call	checkUpdateEvents
-		jc	short .playback_end
-		jmp	.playback_lop
+		;jc	short .playback_end
+		;jmp	short .playback_lop
+		; 16/02/2025
+		jnc	short .playback_lop
+
 		;;;; ---------------------
 
 .playback_end:
-		;;; 10/01/2025
-		;mov	ax, 4E30h
-		;mov	[0B8000h], ax
-		; 26/01/2025
-		;mov	bx, 0C30h
-		; 13/02/2025
-		mov	dx, 0C30h
-		call	display_indicator
-		;;;
+		; 16/02/2025
 
 		; TRDOS 386 system call
 		; sysaudio
@@ -10778,61 +7149,6 @@ mp3_cast_to_speaker_@:
 		sys	_audio, 0A00h
 		; Disable audio device
 		sys	_audio, 0C00h
-		retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 26/01/2025 (mp3play5.s)
-		; Display buffer swap/switch (interrupt) indicator
-		; on top left of the screen/window
-display_indicator:
-		; 26/01/2025
-		; bl = buffer indicator ('1', '2' or '0' -stop- )
-		; bh = color
-		;
-		; (320*200, 256 colors)
-;tl0:		;
-		; 30/12/2024 (cgaplay.s)
-		;;;
-		; 13/02/2025
-		; dl = buffer indicator
-		; dh = color
-		;mov	dl, bl ; character
-
-		;;;;
-		; 13/02/2025
-		cmp	dl, [indicator]
-		je	short tL0_4
-		mov	[indicator], dl
-		;;;;
-
-		mov	edi, 0A0000h
-
-		mov	esi, 8 ; 8 pixels (8*8 pixels font)
-
-		mov	al, dh ; red or blue
-tL0_1:
-		;mov	ecx, 8 ; 8 pixels (8*8 pixels font)
-		mov	ecx, 7
-tL0_2:
-		stosb
-		dec	ecx
-		jnz	short tL0_2
-		dec	esi
-		jz	short tL0_3
-		;add	edi, 320-8 ; next line
-		add	edi, 320-7
-		jmp	short tL0_1
-tL0_3:
-		; write system font
-		mov	dh, 01h
-		;mov	dl, al ; character
-		;xor	esi, esi ; = row 0, column 0
-		sys	_video, 010Fh, 0Eh ; yellow
-		;;;
-tL0_4:
 		retn
 
 
@@ -10913,6 +7229,9 @@ teab_enqueue_done:
 
 ; =============== S U B R O U T I N E =======================================
 		
+		; 18/02/2025
+		; 17/02/2025
+		; 16/02/2025
 		; 30/01/2025
 		; 27/01/2025
 		; 26/01/2025
@@ -10944,23 +7263,35 @@ audio_system_init_x:
 		;mov	eax, ecx
 		shl	eax, 1 ; * 2 (mono to stereo)
 
+		; 18/02/2025
+		; 17/02/2025
 		mov	ebx, convert_to_stereo
-		cmp	byte [mp3_bytes_per_sample], 2
-		je	short .set_sizes ; 16bit mono
+		
+		; 17/02/2025
+		;cmp	byte [mp3_bytes_per_sample], 2
+		;je	short .set_sizes ; 16bit mono
+		jmp	.set_sizes
 
-		; 8bit output (16bit conversion is neeed)
-		mov	ebx, convert_to_16bit
-		cmp	byte [mp3_output_num_channels], 2
-		je	short .set_sizes ; 8bit stereo
-		; 8bit mono output
-		;shr	ecx, 1 ; / 2 ; 4 blocks
-		; 14/01/2025
-		shl	eax, 1
-		; 14/01/2025
-		;shr	byte [blocks], 1
-		mov	ebx, convert_to_stereo_16bit
+		; 17/02/2025
+		; [mp3_bytes_per_sample] = 2
+		; 16bit mono or 16bit stereo 
+		; (but 16bit stereo does not need conversion here)
+
+		;; 8bit output (16bit conversion is neeed)
+		;mov	ebx, convert_to_16bit
+		;; 16/02/2025
+		;cmp	byte [mp3_num_channels], 2
+		;je	short .set_sizes ; 8bit stereo
+		;; 8bit mono output
+		;;shr	ecx, 1 ; / 2 ; 4 blocks
+		;; 14/01/2025
+		;shl	eax, 1
+		;; 14/01/2025
+		;;shr	byte [blocks], 1
+		;mov	ebx, convert_to_stereo_16bit
 .set_sizes:
 .set_sizes_@:
+		; 18/02/2025
 		mov	[conversion], ebx
 		mov	[loadsize], ecx
 		;;;
@@ -10976,29 +7307,35 @@ audio_system_init_x:
 .chk_sample_rate:
 		; set interpolation parameters
 		; (for 8, 11.025, 16, 22.050, 24, 32, 44.1 kHZ)
-		mov	eax, [mp3_output_sample_rate]
+		; 16/02/2025
+		mov	eax, [mp3_sample_rate]
 		; ecx = 8 * [mp3_samples_output_size] ; 8 blocks
 .chk_44khz:
 		cmp	eax, 44100
 		jne	short .chk_32khz
 		; 30/01/2025
 		mov	eax, 25 ; *
-		cmp	byte [mp3_bytes_per_sample], 1
-		jna	short .chk_44khz_1
+		; 17/02/2025
+		;cmp	byte [mp3_bytes_per_sample], 1
+		;jna	short .chk_44khz_1
 		mov	ebx, load_44khz_stereo_16_bit
-		cmp	byte [mp3_output_num_channels], 1
+		; 16/02/2025
+		cmp	byte [mp3_num_channels], 1
 		jne	short .chk_44khz_2
 		mov	ebx, load_44khz_mono_16_bit
 		;jmp	short .chk_44khz_2
 		; 30/01/2025
 		jmp	short .chk_44khz_3
 .chk_44khz_1:
-		; 30/01/2025
-		shl	eax, 1
-		mov	ebx, load_44khz_stereo_8_bit
-		cmp	byte [mp3_output_num_channels], 1
-		jne	short .chk_44khz_2
-		mov	ebx, load_44khz_mono_8_bit
+		; 17/02/2025
+		; 	[mp3_bytes_per_sample] = 2
+		;; 30/01/2025
+		;shl	eax, 1
+		;mov	ebx, load_44khz_stereo_8_bit
+		;; 16/02/2025
+		;cmp	byte [mp3_num_channels], 1
+		;jne	short .chk_44khz_2
+		;mov	ebx, load_44khz_mono_8_bit
 .chk_44khz_3:
 		; 30/01/2025
 		shl	eax, 1
@@ -11034,22 +7371,27 @@ audio_system_init_x:
 		jne	short .chk_24khz
 		; 30/01/2025
 		mov	eax, 3 ; *
-		cmp	byte [mp3_bytes_per_sample], 1
-		jna	short .chk_32khz_1
+		; 17/02/2025
+		;cmp	byte [mp3_bytes_per_sample], 1
+		;jna	short .chk_32khz_1
 		mov	ebx, load_32khz_stereo_16_bit
-		cmp	byte [mp3_output_num_channels], 1
+		; 16/02/2025
+		cmp	byte [mp3_num_channels], 1
 		jne	short .chk_32khz_2
 		mov	ebx, load_32khz_mono_16_bit
 		;jmp	short .chk_32khz_2
 		; 30/01/2025
 		jmp	short .chk_32khz_3
 .chk_32khz_1:
-		; 30/01/2025
-		shl	eax, 1
-		mov	ebx, load_32khz_stereo_8_bit
-		cmp	byte [mp3_output_num_channels], 1
-		jne	short .chk_32khz_2
-		mov	ebx, load_32khz_mono_8_bit
+		; 17/02/2025
+		;	[mp3_bytes_per_sample] = 2
+		;; 30/01/2025
+		;shl	eax, 1
+		;mov	ebx, load_32khz_stereo_8_bit
+		;; 16/02/2025
+		;cmp	byte [mp3_num_channels], 1
+		;jne	short .chk_32khz_2
+		;mov	ebx, load_32khz_mono_8_bit
 .chk_32khz_3:
 		; 30/01/2025
 		shl	eax, 1
@@ -11067,25 +7409,30 @@ audio_system_init_x:
 		jne	short .chk_22khz
 		; 30/01/2025
 		mov	eax, ecx ; *
-		cmp	byte [mp3_bytes_per_sample], 1
-		jna	short .chk_24khz_1
+		; 17/02/2025
+		;cmp	byte [mp3_bytes_per_sample], 1
+		;jna	short .chk_24khz_1
 		; 14/01/2025 
 		; bx -> ebx
 		; (BugFix, 'playwav9.s' has a bug here) 
 		mov	ebx, load_24khz_stereo_16_bit
-		cmp	byte [mp3_output_num_channels], 1
+		; 16/02/2025
+		cmp	byte [mp3_num_channels], 1
 		jne	short .chk_24khz_2
 		mov	ebx, load_24khz_mono_16_bit
 		;jmp	short .chk_24khz_2
 		; 30/01/2025
 		jmp	short .chk_24khz_3
 .chk_24khz_1:
-		; 30/01/2025
-		shl	eax, 1
-		mov	ebx, load_24khz_stereo_8_bit
-		cmp	byte [mp3_output_num_channels], 1
-		jne	short .chk_24khz_2
-		mov	ebx, load_24khz_mono_8_bit
+		; 17/02/2025
+		;	[mp3_bytes_per_sample] = 2
+		;; 30/01/2025
+		;shl	eax, 1
+		;mov	ebx, load_24khz_stereo_8_bit
+		;; 16/02/2025
+		;cmp	byte [mp3_num_channels], 1
+		;jne	short .chk_24khz_2
+		;mov	ebx, load_24khz_mono_8_bit
 .chk_24khz_3:
 		; 30/01/2025
 		shl	eax, 1
@@ -11099,22 +7446,27 @@ audio_system_init_x:
 		jne	short .chk_16khz
 		; 30/01/2025
 		mov	eax, 37 ; *
-		cmp	byte [mp3_bytes_per_sample], 1
-		jna	short .chk_22khz_1
+		; 17/02/2025
+		;cmp	byte [mp3_bytes_per_sample], 1
+		;jna	short .chk_22khz_1
 		mov	ebx, load_22khz_stereo_16_bit
-		cmp	byte [mp3_output_num_channels], 1
+		; 16/02/2025
+		cmp	byte [mp3_num_channels], 1
 		jne	short .chk_22khz_2
 		mov	ebx, load_22khz_mono_16_bit
 		;jmp	short .chk_22khz_2
 		; 30/01/2025
 		jmp	short .chk_22khz_3
 .chk_22khz_1:
-		; 30/01/2025
-		shl	eax, 1
-		mov	ebx, load_22khz_stereo_8_bit
-		cmp	byte [mp3_output_num_channels], 1
-		jne	short .chk_22khz_2
-		mov	ebx, load_22khz_mono_8_bit
+		; 17/02/2025
+		;	[mp3_bytes_per_sample] = 2
+		;; 30/01/2025
+		;shl	eax, 1
+		;mov	ebx, load_22khz_stereo_8_bit
+		;; 16/02/2025
+		;cmp	byte [mp3_num_channels], 1
+		;jne	short .chk_22khz_2
+		;mov	ebx, load_22khz_mono_8_bit
 .chk_22khz_3:
 		; 30/01/2025
 		shl	eax, 1
@@ -11135,22 +7487,27 @@ audio_system_init_x:
 		mov	eax, ecx ; *
 		shl	eax, 1
 		add	eax, ecx
-		cmp	byte [mp3_bytes_per_sample], 1
-		jna	short .chk_16khz_1
+		; 17/02/2025
+		;cmp	byte [mp3_bytes_per_sample], 1
+		;jna	short .chk_16khz_1
 		mov	ebx, load_16khz_stereo_16_bit
-		cmp	byte [mp3_output_num_channels], 1
+		; 16/02/2025
+		cmp	byte [mp3_num_channels], 1
 		jne	short .chk_16khz_2
 		mov	ebx, load_16khz_mono_16_bit
 		;jmp	short .chk_16khz_2
 		; 30/01/2025
 		jmp	short .chk_16khz_3
 .chk_16khz_1:
-		; 30/01/2025
-		shl	eax, 1
-		mov	ebx, load_16khz_stereo_8_bit
-		cmp	byte [mp3_output_num_channels], 1
-		jne	short .chk_16khz_2
-		mov	ebx, load_16khz_mono_8_bit
+		; 17/02/2025
+		;	[mp3_bytes_per_sample] = 2
+		;; 30/01/2025
+		;shl	eax, 1
+		;mov	ebx, load_16khz_stereo_8_bit
+		;; 16/02/2025
+		;cmp	byte [mp3_num_channels], 1
+		;jne	short .chk_16khz_2
+		;mov	ebx, load_16khz_mono_8_bit
 .chk_16khz_3:
 		; 30/01/2025
 		shl	eax, 1
@@ -11166,22 +7523,27 @@ audio_system_init_x:
 		jne	short .chk_8khz
 		; 30/01/2025
 		mov	eax, 74
-		cmp	byte [mp3_bytes_per_sample], 1
-		jna	short .chk_11khz_1
+		; 17/02/2025
+		;cmp	byte [mp3_bytes_per_sample], 1
+		;jna	short .chk_11khz_1
 		mov	ebx, load_11khz_stereo_16_bit
-		cmp	byte [mp3_output_num_channels], 1
+		; 16/02/2025
+		cmp	byte [mp3_num_channels], 1
 		jne	short .chk_11khz_2
 		mov	ebx, load_11khz_mono_16_bit
 		;jmp	short .chk_11khz_2
 		; 30/01/2025
 		jmp	short .chk_11khz_3
 .chk_11khz_1:
-		; 30/01/2025
-		shl	eax, 1
-		mov	ebx, load_11khz_stereo_8_bit
-		cmp	byte [mp3_output_num_channels], 1
-		jne	short .chk_11khz_2
-		mov	ebx, load_11khz_mono_8_bit
+		; 17/02/2025
+		;	[mp3_bytes_per_sample] = 2
+		;; 30/01/2025
+		;shl	eax, 1
+		;mov	ebx, load_11khz_stereo_8_bit
+		;; 16/02/2025
+		;cmp	byte [mp3_num_channels], 1
+		;jne	short .chk_11khz_2
+		;mov	ebx, load_11khz_mono_8_bit
 .chk_11khz_3:
 		; 30/01/2025
 		shl	eax, 1
@@ -11205,22 +7567,27 @@ audio_system_init_x:
 		jne	short .chk_12khz
 		; 30/01/2025
 		mov	eax, 6 ; *
-		cmp	byte [mp3_bytes_per_sample], 1
-		jna	short .chk_8khz_1
+		; 17/02/2025
+		;cmp	byte [mp3_bytes_per_sample], 1
+		;jna	short .chk_8khz_1
 		mov	ebx, load_8khz_stereo_16_bit
-		cmp	byte [mp3_output_num_channels], 1
+		; 16/02/2025
+		cmp	byte [mp3_num_channels], 1
 		jne	short .chk_8khz_2
 		mov	ebx, load_8khz_mono_16_bit
 		;jmp	short .chk_8khz_2
 		; 30/01/2025
 		jmp	short .chk_8khz_3
 .chk_8khz_1:
-		; 30/01/2025
-		shl	eax, 1
-		mov	ebx, load_8khz_stereo_8_bit
-		cmp	byte [mp3_output_num_channels], 1
-		jne	short .chk_8khz_2
-		mov	ebx, load_8khz_mono_8_bit
+		; 17/02/2025
+		;	[mp3_bytes_per_sample] = 2
+		;; 30/01/2025
+		;shl	eax, 1
+		;mov	ebx, load_8khz_stereo_8_bit
+		;; 16/02/2025
+		;cmp	byte [mp3_num_channels], 1
+		;jne	short .chk_8khz_2
+		;mov	ebx, load_8khz_mono_8_bit
 .chk_8khz_3:
 		; 30/01/2025
 		shl	eax, 1
@@ -11235,19 +7602,25 @@ audio_system_init_x:
 		cmp	eax, 12000
 		jne	short .vra_needed
 		mov	eax, ecx ; *
-		cmp	byte [mp3_bytes_per_sample], 1
-		jna	short .chk_12khz_1
+		; 17/02/2025
+		;cmp	byte [mp3_bytes_per_sample], 1
+		;jna	short .chk_12khz_1
 		mov	ebx, load_12khz_stereo_16_bit
-		cmp	byte [mp3_output_num_channels], 1
+		; 16/02/2025
+		cmp	byte [mp3_num_channels], 1
 		jne	short .chk_12khz_2
 		mov	ebx, load_12khz_mono_16_bit
 		jmp	short .chk_12khz_3
 .chk_12khz_1:
-		shl	eax, 1
-		mov	ebx, load_12khz_stereo_8_bit
-		cmp	byte [mp3_output_num_channels], 1
-		jne	short .chk_12khz_2
-		mov	ebx, load_12khz_mono_8_bit
+		; 17/02/2025
+		;	[mp3_bytes_per_sample] = 2
+		;; 01/02/2025
+		;shl	eax, 1
+		;mov	ebx, load_12khz_stereo_8_bit
+		;; 16/02/2025
+		;cmp	byte [mp3_num_channels], 1
+		;jne	short .chk_12khz_2
+		;mov	ebx, load_12khz_mono_8_bit
 .chk_12khz_3:
 		shl	eax, 1
 .chk_12khz_2:
@@ -11325,36 +7698,26 @@ audio_system_init_x:
 
 ; =============== S U B R O U T I N E =======================================
 
+		; 15/02/2025
 		; 14/01/2025
 		; 13/01/2025
 mp3_cast_to_speaker_x:
-; 13/01/2025
-if 0
-		; Start	to play
-		mov	eax, [mp3_bytes_per_sample]
-		;shr	al, 1 ; 8 -> 0, 16 -> 1
-		;shl	al, 1 ; 16 -> 2, 8 -> 0
-		and	al, 2
-		mov	ebx, [mp3_output_num_channels]
-		dec	ebx
-		or	bl, al
-		mov	ecx, [mp3_output_sample_rate]
-		mov	bh, 4 ; start to play
-else
 		; 48 kHZ, 16bit, stereo
 		mov	ebx, 0403h
 		mov	ecx, 48000
 		; 14/01/2025
 		cmp	byte [vra], 1
 		jb	short .jmpto@
-		mov	ecx, [mp3_output_sample_rate] 
+		; 15/02/2025
+		mov	ecx, [mp3_sample_rate] 
 .jmpto@:
-end if
 		jmp	mp3_cast_to_speaker_@
 
 
 ; =============== S U B R O U T I N E =======================================
-		
+	
+		; 18/02/2025
+		; 17/02/2025	
 		; 23/01/2025
 		; 15/01/2025
 		; 13/01/2025
@@ -11395,8 +7758,12 @@ try_enqueue_all_blocks_x:
 		cmp	eax, 0
 		jz	short .next_block
 
+		; 18/02/2025
 		; 15/01/2025
 		call	dword [conversion]
+		; 17/02/2025 (only one option = 16bit mono)
+		;call	convert_to_stereo
+		
 .no_error:
 		; 15/01/2025
 		inc	byte [num_enqueued_frames]
@@ -11478,6 +7845,9 @@ cts_3:
 
 ; /////
 
+; 17/02/2025
+%if 0
+
 	; 13/01/2025
 convert_to_16bit:
 	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
@@ -11511,12 +7881,16 @@ cts16b_1:
 
 ; /////
 
+%endif
+
 ; =============== S U B R O U T I N E =======================================
 
 ; --------------------------------------------------------
 ; 13/01/2025
 ; --------------------------------------------------------
 
+; 17/02/2025 - tmp3play.s
+;	16bit stereo or 16bit mono playback	
 ; 13/01/2025 - mp3player modifications (mp3play3.s)
 ; 07/12/2024 - playwav9.s
 ; 01/12/2024 - ac97play.s
@@ -11551,224 +7925,6 @@ cts16b_1:
 ;;		       	NFORCE4 (CK804) AC97 audio hardware.
 ;;			Realtek ALC850 codec.
 ;;		       	Retro DOS v4.2 (MSDOS 6.22) operating system.
-
-load_8khz_mono_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-lff8m_1:
-	lodsb
-	mov	[previous_val], al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (left channel)
-	stosw		; original sample (right channel)
-	;xor	eax, eax
-	mov	al, 80h
-	dec	ecx
-	jz	short lff8m_2
-	mov	al, [esi]
-lff8m_2:
-	;mov	[next_val], ax
-	mov	bh, al	; [next_val]
-	mov	ah, [previous_val]
-	add	al, ah	; [previous_val]
-	rcr	al, 1
-	mov	dl, al	; this is interpolated middle (3th) sample
-	add	al, ah	; [previous_val]
-	rcr	al, 1	
-	mov	bl, al 	; this is temporary interpolation value
-	add	al, ah	; [previous_val]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	
-	stosw		; this is 1st interpolated sample (L)
-	stosw		; this is 1st interpolated sample (R)
-	mov	al, bl
-	add	al, dl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 2nd interpolated sample (L)
-	stosw		; this is 2nd interpolated sample (R)
-	mov	al, dl
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is middle (3th) interpolated sample (L)
-	stosw		; this is middle (3th) interpolated sample (R)
-	;mov	al, [next_val]
-	mov	al, bh
-	add	al, dl
-	rcr	al, 1
-	mov	bl, al	; this is temporary interpolation value
-	add	al, dl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 4th interpolated sample (L)
-	stosw		; this is 4th interpolated sample (R)
-	;mov	al, [next_val]
-	mov	al, bh
-	add	al, bl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 5th interpolated sample (L)
-	stosw		; this is 5th interpolated sample (R)
-	; 8 kHZ mono to 48 kHZ stereo conversion of the sample is OK
-	or	ecx, ecx
-	jnz	short lff8m_1
-
-	; --------------
-
-lff8s_3:
-lff8m_3:
-lff8s2_3:
-lff8m2_3:
-lff16s_3:
-lff16m_3:
-lff16s2_3:
-lff16m2_3:
-lff24_3:
-lff32_3:
-lff44_3:
-lff22_3:
-lff11_3:
-lff12_3: 	; 01/02/2025
-	; 08/12/2024 (BugFix)
-	; 31/05/2024 (BugFix)
-	mov	ecx, [buffer_size] ; 16 bit (48 kHZ, stereo) samples
-	;shl	ecx, 1	; byte count ; Bug !
-	; 08/12/2024
-	;add	ecx, audio_buffer
-	; 13/01/2025 (mp3play3.s)
-	add	ecx, sample_buffer
-	sub	ecx, edi
-	jna	short lff8m_4 ; jbe
-	sub	ecx, edi
-	;inc	ecx
-	shr	ecx, 2
-	xor	eax, eax ; fill (remain part of) buffer with zeros
-	rep	stosd
-lff8m_4:
-	; 31/05/2024 (BugFix)
-	; cf=1 ; Bug !
-	; 08/12/2024
-	;clc
-	retn
-
-; =============== S U B R O U T I N E =======================================
-
-load_8khz_stereo_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-	shr	ecx, 1	; word count
-lff8s_1:
-	lodsb
-	mov	[previous_val_l], al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	lodsb
-	mov	[previous_val_r], al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (R)
-
-	;xor	eax, eax
-	mov	ax, 8080h
-	dec	ecx
-	jz	short lff8s_2
-		; convert 8 bit sample to 16 bit sample
-	mov	ax, [esi]
-lff8s_2:
-	mov	[next_val_l], al
-	mov	[next_val_r], ah
-	mov	ah, [previous_val_l]
-	add	al, ah
-	rcr	al, 1
-	mov	dl, al	; this is interpolated middle (3th) sample (L)
-	add	al, ah
-	rcr	al, 1
-	mov	bl, al	; this is temporary interpolation value (L)
-	add	al, ah
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 1st interpolated sample (L)
-	mov	al, [next_val_r]
-	mov	ah, [previous_val_r]
-	add	al, ah
-	rcr	al, 1
-	mov	dh, al	; this is interpolated middle (3th) sample (R)
-	add	al, ah
-	rcr	al, 1
-	mov	bh, al	; this is temporary interpolation value (R)
-	add	al, ah
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 1st interpolated sample (R)
-	mov	al, bl
-	add	al, dl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 2nd interpolated sample (L)
-	mov	al, bh
-	add	al, dh
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw 		; this is 2nd interpolated sample (R)
-	mov	al, dl
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is middle (3th) interpolated sample (L)
-	mov	al, dh
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is middle (3th) interpolated sample (R)
-	mov	al, [next_val_l]
-	add	al, dl
-	rcr	al, 1
-	mov	bl, al	; this is temporary interpolation value (L)
-	add	al, dl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 4th interpolated sample (L)
-	mov	al, [next_val_r]
-	add	al, dh
-	rcr	al, 1
-	mov	bh, al	; this is temporary interpolation value (R)
-	add	al, dh
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 4th interpolated sample (R)
-	mov	al, [next_val_l]
-	add	al, bl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 5th interpolated sample (L)
-	mov	al, [next_val_r]
-	add	al, bh
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 5th interpolated sample (R)
-	; 8 kHZ stereo to 48 kHZ stereo conversion of the sample is OK
-	jecxz	lff8s_6
-	jmp	lff8s_1
-lff8s_6:
-	jmp	lff8s_3
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -11831,7 +7987,9 @@ lff8m2_2:
 	; 8 kHZ mono to 48 kHZ stereo conversion of the sample is OK
 	or	ecx, ecx
 	jnz	lff8m2_1
-	jmp	lff8m2_3
+	;jmp	lff8m2_3
+	; 17/02/2025
+	jmp	lff8_3
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -11931,123 +8089,9 @@ lff8s2_2:
 	jecxz	lff8_s2_9
 	jmp	lff8s2_1
 lff8_s2_9:
-	jmp	lff8s2_3
-
-; =============== S U B R O U T I N E =======================================
-
-load_16khz_mono_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-lff16m_1:
-	lodsb
-	;mov	[previous_val], al
-	mov	bl, al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (left channel)
-	stosw		; original sample (right channel)
-	;xor	ax, ax
-	; 14/11/22023
-	mov	al, 80h
-	dec	ecx
-	jz	short lff16m_2
-	mov	al, [esi]
-lff16m_2:
-	;mov	[next_val], al
-	mov	bh, al
-	;add	al, [previous_val]
-	add	al, bl
-	rcr	al, 1
-	mov	dl, al	; this is interpolated middle (temp) sample
-	;add	al, [previous_val]
-	add	al, bl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 1st interpolated sample (L)
-	stosw		; this is 1st interpolated sample (R)
-	;mov	al, [next_val]
-	mov	al, bh
-	add	al, dl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 2nd interpolated sample (L)
-	stosw		; this is 2nd interpolated sample (R)
-	
-	; 16 kHZ mono to 48 kHZ stereo conversion of the sample is OK
-	or	ecx, ecx
-	jnz	short lff16m_1
-	jmp	lff16m_3
-
-; =============== S U B R O U T I N E =======================================
-
-load_16khz_stereo_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-	shr	ecx, 1	; word count
-lff16s_1:
-	lodsb
-	mov	[previous_val_l], al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	lodsb
-	mov	[previous_val_r], al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (R)
-
-	;xor	eax, eax
-	mov	ax, 8080h
-	dec	ecx
-	jz	short lff16s_2
-		; convert 8 bit sample to 16 bit sample
-	mov	ax, [esi]
-lff16s_2:
-	;mov	[next_val_l], al
-	;mov	[next_val_r], ah
-	mov	ebx, eax
-	add	al, [previous_val_l]
-	rcr	al, 1
-	mov	dl, al	; this is temporary interpolation value (L)
-	add	al, [previous_val_l]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 1st interpolated sample (L)
-	mov	al, bh	; [next_val_r]
-	add	al, [previous_val_r]
-	rcr	al, 1
-	mov	dh, al	; this is temporary interpolation value (R)
-	add	al, [previous_val_r]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 1st interpolated sample (R)
-	mov	al, dl
-	add	al, bl	; [next_val_l]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is 2nd interpolated sample (L)
-	mov	al, dh
-	add	al, bh	; [next_val_r]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw 		; this is 2nd interpolated sample (R)
-	
-	; 16 kHZ stereo to 48 kHZ stereo conversion of the sample is OK
-	or	ecx, ecx
-	jnz	short lff16s_1
-	jmp	lff16s_3
+	;jmp	lff8s2_3
+	; 17/02/2025
+	jmp	lff8_3
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -12091,7 +8135,9 @@ lff16m2_2:
 	; 16 kHZ mono to 48 kHZ stereo conversion of the sample is OK
 	or	ecx, ecx
 	jnz	short lff16m2_1
-	jmp	lff16m2_3
+	;jmp	lff16m2_3
+	; 17/02/2025
+	jmp	lff16_3
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -12154,95 +8200,9 @@ lff16s2_2:
 	; 16 kHZ stereo to 48 kHZ stereo conversion of the sample is OK
 	or	ecx, ecx
 	jnz	lff16s2_1
-	jmp	lff16s2_3
-
-; =============== S U B R O U T I N E =======================================
-
-load_24khz_mono_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-lff24m_1:
-	lodsb
-	;mov	[previous_val], al
-	mov	bl, al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (left channel)
-	stosw		; original sample (right channel)
-	;xor	eax, eax
-	mov	al, 80h
-	dec	ecx
-	jz	short lff24m_2
-	mov	al, [esi]
-lff24m_2:
-	;;mov	[next_val], al
-	;mov	bh, al
-	;add	al, [previous_val]
-	add	al, bl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is interpolated sample (L)
-	stosw		; this is interpolated sample (R)
-	
-	; 24 kHZ mono to 48 kHZ stereo conversion of the sample is OK
-	or	ecx, ecx
-	jnz	short lff24m_1
-	jmp	lff24_3
-
-; =============== S U B R O U T I N E =======================================
-
-load_24khz_stereo_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-	shr	ecx, 1	; word count
-lff24s_1:
-	lodsb
-	mov	[previous_val_l], al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	lodsb
-	mov	[previous_val_r], al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (R)
-
-	;xor	eax, eax
-	mov	ax, 8080h
-	dec	ecx
-	jz	short lff24s_2
-		; convert 8 bit sample to 16 bit sample
-	mov	ax, [esi]
-lff24s_2:
-	;;mov	[next_val_l], al
-	;;mov	[next_val_r], ah
-	;mov	bx, ax
-	mov	bh, ah
-	add	al, [previous_val_l]
-	rcr	al, 1
-	;mov	dl, al
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is interpolated sample (L)
-	mov	al, bh	; [next_val_r]
-	add	al, [previous_val_r]
-	rcr	al, 1
-	;mov	dh, al
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is interpolated sample (R)
-		
-	; 24 kHZ stereo to 48 kHZ stereo conversion of the sample is OK
-	or	ecx, ecx
-	jnz	short lff24s_1
-	jmp	lff24_3
+	;jmp	lff16s2_3
+	; 17/02/2025
+	jmp	lff16_3
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -12333,120 +8293,6 @@ lff24s2_2:
 	or	ecx, ecx
 	jnz	short lff24s2_1
 	jmp	lff24_3
-
-; =============== S U B R O U T I N E =======================================
-
-load_32khz_mono_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-lff32m_1:
-	lodsb
-	;mov	[previous_val], al
-	mov	bl, al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (left channel)
-	stosw		; original sample (right channel)
-	;xor	eax, eax
-	mov	al, 80h
-	dec	ecx
-	jz	short lff32m_2
-	mov	al, [esi]
-lff32m_2:
-	;;mov	[next_val], al
-	;mov	bh, al
-	;add	al, [previous_val]
-	add	al, bl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is interpolated sample (L)
-	stosw		; this is interpolated sample (R)
-	
-	; different than 8-16-24 kHZ !
-	; 'original-interpolated-original' trio samples
-	jecxz	lff32m_3
-
-	lodsb
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; original sample (left channel)
-	stosw		; original sample (right channel)
-
-	; 32 kHZ mono to 48 kHZ stereo conversion of the sample is OK
-	dec	ecx
-	jnz	short lff32m_1
-lff32m_3:
-	jmp	lff32_3
-
-; =============== S U B R O U T I N E =======================================
-
-load_32khz_stereo_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-	shr	ecx, 1	; word count
-lff32s_1:
-	lodsb
-	mov	[previous_val_l], al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	lodsb
-	mov	[previous_val_r], al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (R)
-
-	;xor	eax, eax
-	mov	ax, 8080h
-	dec	ecx
-	jz	short lff32s_2
-		; convert 8 bit sample to 16 bit sample
-	mov	ax, [esi]
-lff32s_2:
-	;;mov	[next_val_l], al
-	;;mov	[next_val_r], ah
-	;mov	bx, ax
-	mov	bh, ah
-	add	al, [previous_val_l]
-	rcr	al, 1
-	;mov	dl, al
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is interpolated sample (L)
-	mov	al, bh	; [next_val_r]
-	add	al, [previous_val_r]
-	rcr	al, 1
-	;mov	dh, al
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; this is interpolated sample (R)
-
-	; different than 8-16-24 kHZ !
-	; 'original-interpolated-original' trio samples
-	jecxz	lff32s_3
-
-	lodsb
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; original sample (left channel)
-
-	lodsb
-	sub	al, 80h
-	shl	ax, 8
-	stosw		; original sample (right channel)
-		
-	; 32 kHZ stereo to 48 kHZ stereo conversion of the sample is OK
-	dec	ecx
-	jnz	short lff32s_1
-lff32s_3:
-	jmp	lff32_3
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -12554,104 +8400,6 @@ lff32s2_2:
 	jnz	short lff32s2_1
 lff32s2_3:
 	jmp	lff32_3
-
-; =============== S U B R O U T I N E =======================================
-
-load_22khz_mono_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-lff22m_9:
-	mov	ebp, 5	; interpolation (one step) loop count
-	mov	byte [faz], 3  ; 3 steps/phases
-lff22m_1:
-	; 3:2:2:2:2:2::3:2:2:2:2::3:2:2:2:2:2  ; 37/17
-	lodsb
-	mov	dl, 80h
-	dec	ecx
-	jz	short lff22m_2_1
-	mov	dl, [esi]
-lff22m_2_1:
-	; al = [previous_val]
-	; dl = [next_val]
-	call	interpolating_3_8bit_mono ; 1 of 17
-	jecxz	lff22m_3
-lff22m_2_2:
-	lodsb
-	mov	dl, 80h
-	dec	ecx
-	jz	short lff22m_2_3
-	mov	dl, [esi]
-lff22m_2_3:
- 	call	interpolating_2_8bit_mono ; 2 of 17 .. 6 of 17
-	jecxz	lff22m_3
-	dec	ebp
-	jnz	short lff22m_2_2
-
-	mov	al, [faz]
-	dec	al
-	jz	short lff22m_9
-	dec	byte [faz]
-	mov	ebp, 4
-	dec	al
-	jnz	short lff22m_1 ; 3:2:2:2:2 ; 7-11 of 17
-	inc	ebp ; 5
-	jmp	short lff22m_1 ; 3:2:2:2:2:2 ; 12-17 of 17
-
-lff22m_3:
-lff22s_3:
-	jmp	lff22_3	; padfill
-		; (put zeros in the remain words of the buffer)
-
-; =============== S U B R O U T I N E =======================================
-
-load_22khz_stereo_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-	shr	ecx, 1	; word count
-lff22s_9:
-	mov	ebp, 5	; interpolation (one step) loop count
-	mov	byte [faz], 3  ; 3 steps/phase
-lff22s_1:
-	; 3:2:2:2:2:2::3:2:2:2:2::3:2:2:2:2:2  ; 37/17
-	lodsw
-	mov	dx, 8080h
-	dec	ecx
-	jz	short lff22s_2_1
-	mov	dx, [esi]
-lff22s_2_1:	
-	; al = [previous_val_l]
-	; ah = [previous_val_r]
-	; dl = [next_val_l]
-	; dh = [next_val_r]
-	call	interpolating_3_8bit_stereo ; 1 of 17
-	jecxz	lff22s_3
-lff22s_2_2:
-	lodsw
-	mov	dx, 8080h
-	dec	ecx
-	jz	short lff22s_2_3
-	mov	dx, [esi]
-lff22s_2_3:
- 	call	interpolating_2_8bit_stereo ; 2 of 17 .. 6 of 17
-	jecxz	lff22s_3
-	dec	ebp
-	jnz	short lff22s_2_2
-
-	mov	al, [faz]
-	dec	al
-	jz	short lff22s_9
-	dec	byte [faz]
-	mov	ebp, 4
-	dec	al
-	jnz	short lff22s_1 ; 3:2:2:2:2 ; 7-11 of 17
-	inc	ebp ; 5
-	jmp	short lff22s_1 ; 3:2:2:2:2:2 ; 12-17 of 17
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -12768,104 +8516,6 @@ lff22s2_2_3:
 lff22s2_2_4:
 	; 26/11/2023
 	jmp	lff22_3	; padfill
-
-; =============== S U B R O U T I N E =======================================
-
-load_11khz_mono_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-lff11m_9:
-	mov	ebp, 6	; interpolation (one step) loop count
-lff11m_1:
-	; 5:4:4::5:4:4::5:4:4::5:4:4::5:4:4::5:4  ; 74/17
-	lodsb
-	mov	dl, 80h
-	dec	ecx
-	jz	short lff11m_2_1
-	mov	dl, [esi]
-lff11m_2_1:	
-	; al = [previous_val]
-	; dl = [next_val]
-	call	interpolating_5_8bit_mono
-	jecxz	lff11m_3
-lff11m_2_2:
-	lodsb
-	mov	dl, 80h
-	dec	ecx
-	jz	short lff11m_2_3
-	mov	dl, [esi]
-lff11m_2_3:
- 	call	interpolating_4_8bit_mono
-	jecxz	lff11m_3
-
-	dec	ebp
-	jz	short lff11m_9
-
-	lodsb
-	mov	dl, 80h
-	dec	ecx
-	jz	short lff11m_2_4
-	mov	dl, [esi]
-lff11m_2_4:
-	call	interpolating_4_8bit_mono
-	jecxz	lff11m_3
-	jmp	short lff11m_1
-
-; =============== S U B R O U T I N E =======================================
-
-load_11khz_stereo_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-	shr	ecx, 1	; word count
-lff11s_9:
-	mov	ebp, 6	; interpolation (one step) loop count
-lff11s_1:
-	; 5:4:4::5:4:4::5:4:4::5:4:4::5:4:4::5:4  ; 74/17
-	lodsw
-	mov	dx, 8080h
-	dec	ecx
-	jz	short lff11s_2_1
-	mov	dx, [esi]
-lff11s_2_1:	
-	; al = [previous_val_l]
-	; ah = [previous_val_r]
-	; dl = [next_val_l]
-	; dh = [next_val_r]
-	call	interpolating_5_8bit_stereo
-	jecxz	lff11s_3
-lff11s_2_2:
-	lodsw
-	mov	dx, 8080h
-	dec	ecx
-	jz	short lff11s_2_3
-	mov	dx, [esi]
-lff11s_2_3:
- 	call	interpolating_4_8bit_stereo
-	jecxz	lff11s_3
-	
-	dec	ebp
-	jz	short lff11s_9
-
-	lodsw
-	mov	dx, 8080h
-	dec	ecx
-	jz	short lff11s_2_4
-	mov	dx, [esi]
-lff11s_2_4:
-	call	interpolating_4_8bit_stereo
-	jecxz	lff11s_3
-	jmp	short lff11s_1
-
-lff11m_3:
-lff11s_3:
-	jmp	lff11_3	; padfill
-		; (put zeros in the remain words of the buffer)
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -13010,99 +8660,6 @@ lff11s2_3:
 
 ; =============== S U B R O U T I N E =======================================
 
-load_44khz_mono_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-lff44m_9:
-	mov	ebp, 10	; interpolation (one step) loop count
-	mov	byte [faz], 2  ; 2 steps/phases
-lff44m_1:
-	; 2:1:1:1:1:1:1:1:1:1:1::	; 25/23
-	; 2:1:1:1:1:1:1:1:1:1:1:1
-	lodsb
-	mov	dl, 80h
-	dec	ecx
-	jz	short lff44m_2_1
-	mov	dl, [esi]
-lff44m_2_1:	
-	; al = [previous_val]
-	; dl = [next_val]
-	call	interpolating_2_8bit_mono
-	jecxz	lff44m_3
-lff44m_2_2:
-	lodsb
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; (L)
-	stosw		; (R)
-
-	dec	ecx
-	jz	short lff44m_3
-	dec	ebp
-	jnz	short lff44m_2_2
-	
-	dec	byte [faz]
-	jz	short lff44m_9 
-	mov	ebp, 11
-	jmp	short lff44m_1
-
-lff44m_3:
-lff44s_3:
-	jmp	lff44_3	; padfill
-		; (put zeros in the remain words of the buffer)
-
-; =============== S U B R O U T I N E =======================================
-
-load_44khz_stereo_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	; 13/01/2025
-	shr	ecx, 1	; word count
-lff44s_9:
-	mov	ebp, 10 ; interpolation (one step) loop count
-	mov	byte [faz], 2  ; 2 steps/phase
-lff44s_1:
-	; 2:1:1:1:1:1:1:1:1:1:1::	; 25/23
-	; 2:1:1:1:1:1:1:1:1:1:1:1
-	lodsw
-	mov	dx, 8080h
-	dec	ecx
-	jz	short lff44s_2_1
-	mov	dx, [esi]
-lff44s_2_1:	
-	; al = [previous_val_l]
-	; ah = [previous_val_r]
-	; dl = [next_val_l]
-	; dh = [next_val_r]
-	call	interpolating_2_8bit_stereo
-	jecxz	lff44s_3
-lff44s_2_2:
-	lodsb
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; (L)
-	lodsb
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; (R)
-
-	dec	ecx
-	jz	short lff44s_3	
-	dec	ebp
-	jnz	short lff44s_2_2
-	
-	dec	byte [faz]
-	jz	short lff44s_9 
-	mov	ebp, 11
-	jmp	short lff44s_1
-
-; =============== S U B R O U T I N E =======================================
-
 load_44khz_mono_16_bit:
 	; 13/01/2025 (mp3play3.s)
 	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
@@ -13143,7 +8700,7 @@ lff44m2_2_2:
 
 lff44m2_3:
 lff44s2_3:
-	jmp	lff44_3	; padfill
+	jmp	short lff44_3 ; padfill
 		; (put zeros in the remain words of the buffer)
 
 ; =============== S U B R O U T I N E =======================================
@@ -13188,7 +8745,9 @@ lff44s2_2_2:
 	movsd
 
 	dec	ecx
-	jz	short lff44s2_3	
+	;jz	short lff44s2_3
+	; 17/02/2025
+	jz	short lff44_3
 	dec	ebp
 	jnz	short lff44s2_2_2
 	
@@ -13197,56 +8756,32 @@ lff44s2_2_2:
 	mov	ebp, 11
 	jmp	short lff44s2_1
 
-; =============== S U B R O U T I N E =======================================
 
-	; 01/02/2025
-load_12khz_mono_8_bit:
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-lff12m_1:
-	; original-interpolated-interpolated-interpolated
-	lodsb
-	mov	dl, 80h
-	dec	ecx
-	jz	short lff12m_2
-	mov	dl, [esi]
-lff12m_2:	
-	; al = [previous_val]
-	; dl = [next_val]
- 	call	interpolating_4_8bit_mono
-	jecxz	lff12m_3
-	jmp	short lff12m_1
+; ---------------------------------------------------------------------------
 
-; =============== S U B R O U T I N E =======================================
-
-	; 01/02/2025
-load_12khz_stereo_8_bit:
-	; 13/01/2025 (mp3play3.s)
-	mov	esi, decoding_buffer ; (contains 8bit stereo samples)
-	mov	edi, sample_buffer ; wav output buffer
-	mov	ecx, [loadsize]
-	shr	ecx, 1	; word count
-lff12s_1:
-	; original-interpolated-interpolated-interpolated
-	lodsw
-	mov	dx, 8080h
-	dec	ecx
-	jz	short lff12s_2
-	mov	dx, [esi]
-lff12s_2:	
-	; al = [previous_val_l]
-	; ah = [previous_val_r]
-	; dl = [next_val_l]
-	; dh = [next_val_r]
-	call	interpolating_4_8bit_stereo
-	jecxz	lff12s_3
-	jmp	short lff12s_1
-
-lff12m_3:
-lff12s_3:
-	jmp	lff12_3	; padfill
-		; (put zeros in the remain words of the buffer)
+	; 17/02/2025
+; padfill
+	; (put zeros in the remain words of the buffer)
+lff44_3:
+lff32_3:
+lff24_3:
+lff22_3:
+lff16_3:
+lff12_3:
+lff11_3:
+lff8_3: 
+	; 17/02/2025
+	mov	ecx, [buffer_size] ; 16 bit (48 kHZ, stereo) samples
+	add	ecx, sample_buffer
+	sub	ecx, edi
+	jna	short lff44_4 ; jbe
+	sub	ecx, edi
+	;inc	ecx
+	shr	ecx, 2
+	xor	eax, eax ; fill (remain part of) buffer with zeros
+	rep	stosd
+lff44_4:
+	retn
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -13269,7 +8804,7 @@ lff12m2_2:
 	; ax = [previous_val]
 	; dx = [next_val]
  	call	interpolating_4_16bit_mono
-	jecxz	lff12m_3
+	jecxz	lff12_3	; 17/02/2025
 	jmp	short lff12m2_1
 
 ; =============== S U B R O U T I N E =======================================
@@ -13298,146 +8833,8 @@ lff12s2_2:
 	; [next_val_l]
 	; [next_val_r]
 	call	interpolating_4_16bit_stereo
-	jecxz	lff12s_3
+	jecxz	lff12_3	; 17/02/2025
 	jmp	short lff12s2_1
-
-; =============== S U B R O U T I N E =======================================
-
-interpolating_3_8bit_mono:
-	; 01/02/2025
-	; 16/11/2023
-	; al = [previous_val]
-	; dl = [next_val]
-	; original-interpolated-interpolated
-	mov	bl, al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	stosw		; original sample (R)
-	mov	al, bl
-	add	al, dl
-	rcr	al, 1
-	mov	bh, al	; interpolated middle (temporary)
-	add	al, bl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 1 (L)
-	stosw		; interpolated sample 1 (R)
-	mov	al, bh
-	add	al, dl	; [next_val]
-	rcr	al, 1
-	; 01/02/2025
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 2 (L)
-	stosw		; interpolated sample 2 (R)
-	retn
-
-; =============== S U B R O U T I N E =======================================
-
-interpolating_3_8bit_stereo:
-	; 01/02/2025
-	; 16/11/2023
-	; al = [previous_val_l]
-	; ah = [previous_val_r]
-	; dl = [next_val_l]
-	; dh = [next_val_r]
-	; original-interpolated-interpolated
-	mov	ebx, eax
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	mov	al, bh
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (R)
-	mov	al, bl
-	add	al, dl	; [next_val_l]
-	rcr	al, 1
-	push	eax ; *	; al = interpolated middle (L) (temporary)
-	add	al, bl	; [previous_val_l]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 1 (L)
-	mov	al, bh
-	add	al, dh	; [next_val_r]
-	rcr	al, 1
-	push	eax ; ** ; al = interpolated middle (R) (temporary)
-	add	al, bh	; [previous_val_r]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 1 (R)
-	pop	ebx ; **
-	pop	eax ; *
-	add	al, dl	; [next_val_l]
-	rcr	al, 1
-	; 01/02/2025
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 2 (L)
-	mov	al, bl
-	add	al, dh	; [next_val_r]
-	rcr	al, 1
-	; 01/02/2025
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 2 (R)
-	retn
-
-; =============== S U B R O U T I N E =======================================
-
-interpolating_2_8bit_mono:
-	; 16/11/2023
-	; al = [previous_val]
-	; dl = [next_val]
-	; original-interpolated
-	mov	bl, al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	stosw		; original sample (R)
-	mov	al, bl
-	add	al, dl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample (L)
-	stosw		; interpolated sample (R)
-	retn
-
-; =============== S U B R O U T I N E =======================================
-
-interpolating_2_8bit_stereo:
-	; 16/11/2023
-	; al = [previous_val_l]
-	; ah = [previous_val_r]
-	; dl = [next_val_l]
-	; dh = [next_val_r]
-	; original-interpolated
-	mov	ebx, eax
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	mov	al, bh
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (R)
-	mov	al, bl	; [previous_val_l]
-	add	al, dl	; [next_val_l]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample (L)
-	mov	al, bh
-	add	al, dh	; [next_val_r]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample (R)
-	retn
 
 ; =============== S U B R O U T I N E =======================================
 
@@ -13574,240 +8971,6 @@ interpolating_2_16bit_stereo:
 	;stosw 		; interpolated sample (R)
 	; 14/01/2025
 	stosd
-	retn
-
-; =============== S U B R O U T I N E =======================================
-
-interpolating_5_8bit_mono:
-	; 17/11/2023
-	; al = [previous_val]
-	; dl = [next_val]
-	; original-interpltd-interpltd-interpltd-interpltd
-	mov	bl, al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	stosw		; original sample (R)
-	mov	al, bl
-	add	al, dl
-	rcr	al, 1
-	mov	bh, al	; interpolated middle (temporary)
-	add	al, bl  ; [previous_val]
-	rcr	al, 1 	
-	mov	dh, al	; interpolated 1st quarter (temporary)
-	add	al, bl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 1 (L)
-	stosw		; interpolated sample 1 (R)
-	mov	al, bh
-	add	al, dh
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 2 (L)
-	stosw		; interpolated sample 2 (R)
-	mov	al, bh
-	add	al, dl	; [next_val]
-	rcr	al, 1
-	mov	dh, al	; interpolated 3rd quarter (temporary)
-	add	al, bh
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 3 (L)
-	stosw		; interpolated sample 3 (R)
-	mov	al, dh
-	add	al, dl
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 4 (L)
-	stosw		; interpolated sample 4 (R)
-	retn
-
-; =============== S U B R O U T I N E =======================================
-
-interpolating_5_8bit_stereo:
-	; 17/11/2023
-	; al = [previous_val_l]
-	; ah = [previous_val_r]
-	; dl = [next_val_l]
-	; dh = [next_val_r]
-	; original-interpltd-interpltd-interpltd-interpltd
-	mov	ebx, eax
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	mov	al, bh
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (R)
-	push	edx ; *
-	mov	al, bl
-	add	al, dl	; [next_val_l]
-	rcr	al, 1
-	push	eax ; **	; al = interpolated middle (L) (temporary)
-	add	al, bl	; [previous_val_l]
-	rcr	al, 1
-	xchg	al, bl
-	add	al, bl	; bl = interpolated 1st quarter (L) (temp)
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 1 (L)
-	mov	al, bh
-	add	al, dh	; [next_val_r]
-	rcr	al, 1
-	push	eax ; *** ; al = interpolated middle (R) (temporary)
-	add	al, bh	; [previous_val_r]
-	rcr	al, 1
-	xchg	al, bh
-	add	al, bh	; bh = interpolated 1st quarter (R) (temp)
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 1 (R)
-	pop	edx ; ***
-	pop	eax ; **	; al = interpolated middle (L) (temporary)
-	xchg	al, bl	; al = interpolated 1st quarter (L) (temp)
-	add	al, bl	; bl = interpolated middle (L) (temporary)
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 2 (L)
-	mov	al, dl 	; interpolated middle (R) (temporary)
-	xchg	al, bh	; al = interpolated 1st quarter (R) (temp)
-	add	al, bh	; bh = interpolated middle (R) (temporary)
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 2 (R)
-	pop	edx ; *
-	mov	al, bl	; interpolated middle (L) (temporary)
-	add	al, dl	; [next_val_l]
-	rcr	al, 1
-	xchg	al, bl	; al = interpolated middle (R) (temporary)
-	add	al, bl	; bl = interpolated 3rd quarter (L) (temp)
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 3 (L)
-	mov	al, bh	
-	add	al, dh	; interpolated middle (R) + [next_val_r]
-	rcr	al, 1
-	xchg	al, bh	; al = interpolated middle (R)
-	add	al, bh	; bh = interpolated 3rd quarter (R) (temp)
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 3 (R)
-	mov	al, bl
-	add	al, dl	; [next_val_l]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 4 (L)
-	mov	al, bh
-	add	al, dh	; [next_val_r]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 4 (R)
-	retn
-
-; =============== S U B R O U T I N E =======================================
-
-interpolating_4_8bit_mono:
-	; 17/11/2023
-	; al = [previous_val]
-	; dl = [next_val]
-	; original-interpolated-interpolated-interpolated
-	mov	bl, al
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	stosw		; original sample (R)
-	mov	al, bl
-	add	al, dl	
-	rcr	al, 1
-	xchg	al, bl  ; al = [previous_val]
-	add	al, bl	; bl = interpolated middle (sample 2)
-	rcr	al, 1 	
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 1 (L)
-	stosw		; interpolated sample 1 (R)
-	mov	al, bl	; interpolated middle (sample 2)
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 2 (L)
-	stosw		; interpolated sample 2 (R)
-	mov	al, bl
-	add	al, dl	; [next_val]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 3 (L)
-	stosw		; interpolated sample 3 (R)
-	retn
-
-; =============== S U B R O U T I N E =======================================
-
-interpolating_4_8bit_stereo:
-	; 17/11/2023
-	; al = [previous_val_l]
-	; ah = [previous_val_r]
-	; dl = [next_val_l]
-	; dh = [next_val_r]	
-	; original-interpolated-interpolated-interpolated
-	mov	ebx, eax
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (L)
-	mov	al, bh
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; original sample (R)
-	mov	al, bl
-	add	al, dl	; [next_val_l]
-	rcr	al, 1
-	xchg	al, bl	; al = [previous_val_l]
-	add	al, bl	; bl = interpolated middle (L) (sample 2)
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 1 (L)
-	mov	al, bh
-	add	al, dh	; [next_val_r]
-	rcr	al, 1
-	xchg	al, bh	; al = [previous_val_h]
-	add	al, bh	; bh = interpolated middle (R) (sample 2)
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 1 (R)
-	mov	al, bl	; interpolated middle (L) (sample 2)
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 2 (L)
-	mov	al, bh	; interpolated middle (L) (sample 2)
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 2 (L)
-	mov	al, bl
-	add	al, dl	; [next_val_l]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 3 (L)
-	mov	al, bh
-	add	al, dh	; [next_val_r]
-	rcr	al, 1
-	sub	al, 80h
-	shl	ax, 8	; convert 8 bit sample to 16 bit sample
-	stosw		; interpolated sample 3 (R)
 	retn
 
 ; =============== S U B R O U T I N E =======================================
@@ -14042,34 +9205,29 @@ next_val_r: dw 0
 faz:	db 0
 
 ; ---------------------------------------------------------------------------
-; 12/01/2025 - Hardware Info display/write procedures.
+; 15/02/2025 - Hardware Info display/write procedures.
 ; ---------------------------------------------------------------------------
-; ref: playwav9.s (18/12/2024) - sb16play.s (20/12/2024)
+; ref: twavply3.s (10/02/2025
 
-; =============== S U B R O U T I N E =======================================
+;=============================================================================
+;	Write AC'97 Hardware Information
+;=============================================================================
+	
+	; 09/02/2025
 
-	; 13/02/2025
-	; 09/02/2025 (twavply3.s) - text mode
-	; 26/01/2025 (mp3play5.s) - 640*480, 256 colors -
-	; 12/01/2025
 write_audio_dev_info:
-	cmp	byte [audio_hardware], 2
-	jb	short write_sb16_dev_info  ; SB16
-	je	short write_ac97_pci_dev_info ; AC97
-	retn
-
-; =============== S U B R O U T I N E =======================================
-
-	; 13/02/2025
-	; 09/02/2025 (twavply3.s) - text mode
-	; 26/01/2025 (mp3play5.s) - 640*480, 256 colors -
-	; 20/12/2024 (playwavx.s, sb16play.s)
-write_sb16_dev_info:
-	; 27/11/2024
-	; 24/11/2024 (sb16play.asm)
-
-	mov	eax, [audio_io_base]
 	xor	ebx, ebx
+	cmp	byte [audio_hardware], 1
+	jne	short write_ac97_pci_dev_info
+
+;-----------------------------------------------------------------------------
+	
+	; 09/02/2025
+	; 05/02/2025 - sb16play.s
+
+write_sb16_dev_info:
+	mov	eax, [audio_io_base]
+	;xor	ebx, ebx
 	mov	bl, al
 	mov	dl, bl
 	and	bl, 0Fh
@@ -14085,37 +9243,27 @@ write_sb16_dev_info:
 	mov	[msgBasePort], al
 
 	;xor	eax, eax
-	; 27/11/2024
 	mov	al, [audio_intr]
-	;mov	cl, 10
-	;div	cl
-	;add	ah, 30h
-	;mov	[msgIRQnum], ah
-	; 25/11/2024
 	add	al, 30h
-	mov	[msgIRQnum], al	; 12/01/2025
+	mov	[msgSB16IRQ], al
 
-	; 13/02/2025
 	sys	_msg, msgSB16Info, 255, 07h
 
 	retn
 
-; =============== S U B R O U T I N E =======================================
+;-----------------------------------------------------------------------------
 
-	; 13/02/2025
-	; 09/02/2025 (twavply3.s) - text mode
-	; 26/01/2025 (mp3play5.s) - 640*480, 256 colors -
+	; 09/02/2025
+	; 05/02/2025 - ac97play.s
+	
 write_ac97_pci_dev_info:
-	; 19/11/2024
-	; 30/05/2024
-	; 06/06/2017
-	; 03/06/2017
 	; BUS/DEV/FN
 	;	00000000BBBBBBBBDDDDDFFF00000000
 	; DEV/VENDOR
 	;	DDDDDDDDDDDDDDDDVVVVVVVVVVVVVVVV
 
 	mov	eax, [dev_vendor]
+	; 07/12/2024
 	xor	ebx, ebx
 	mov	bl, al
 	mov	dl, bl
@@ -14228,120 +9376,32 @@ write_ac97_pci_dev_info:
 	mov	al, [ac97_int_ln_reg]
 	mov	cl, 10
 	div	cl
-	; 23/11/2024
 	;add	[msgIRQ], ax
 	add	ax, 3030h
 	mov	[msgIRQ], ax
 	;and	al, al
 	cmp	al, 30h
-	jnz	short _w_ac97imsg_
-	mov	al, byte [msgIRQ+1]
+	jne	short _w_ac97imsg_
+	mov	al, [msgIRQ+1]
 	mov	ah, ' '
 	mov	[msgIRQ], ax
 _w_ac97imsg_:
-
-	; 13/02/025
 	sys	_msg, msgAC97Info, 255, 07h
 
-; ---------------------------------------------------------------------------
+        ;retn
 
-	; 13/02/2025
-	; 09/02/2025 (twavply3.s) - text mode
-	; 26/01/2025
-	; 30/05/2024
+;-----------------------------------------------------------------------------
+
 write_VRA_info:
 	sys	_msg, msgVRAheader, 255, 07h
-
 	cmp	byte [vra], 0
 	jna	short _w_VRAi_no
 _w_VRAi_yes:
 	sys	_msg, msgVRAyes, 255, 07h
 	retn
-
 _w_VRAi_no:
 	sys	_msg, msgVRAno, 255, 07h
 	retn
-
-; =============== S U B R O U T I N E =======================================
-
-	; 26/01/2025
-	; convert number to string with thousand separator
-convert_to_string:
-cfs:
-	mov	ebx, 10
-	mov	ebp, esp
-	xor	ecx, ecx
-	mov	edi, txtfilesize
-	mov	esi, edi
-.cfs_lop:
-	xor	edx, edx
-	div	ebx
-	add	dl, '0'
-	push	edx
-	inc	ecx
-	cmp	cl, 3
-	jb	short .cfs_1
-	or	eax, eax
-	jz	short .cfs_2
-	sub	ecx, ecx
-	mov	dl, ','
-	push	edx
-.cfs_1:
-	and	eax, eax
-	jnz	short .cfs_lop
-.cfs_2:
-	pop	eax
-	stosb
-	cmp	esp, ebp
-	jb	short .cfs_2
-
-	xor	eax, eax ; 0
-	stosb	; asciiz string
-
-	retn
-
-; ---------------------------------------------------------------------------
-
-; 13/02/2025
-; 19/11/2024
-; 03/06/2017
-hex_chars	db "0123456789ABCDEF", 0
-msgAC97Info	db 0Dh, 0Ah
-		db " AC97 Audio Controller & Codec Info", 0Dh, 0Ah
-		db " Vendor ID: "
-msgVendorId	db "0000h Device ID: "
-msgDevId	db "0000h", 0Dh, 0Ah
-		db " Bus: "
-msgBusNo	db "00h Device: "
-msgDevNo	db "00h Function: "
-msgFncNo	db "00h"
-		db 0Dh, 0Ah
-		db " NAMBAR: "
-msgNamBar	db "0000h  "
-		db "NABMBAR: "
-msgNabmBar	db "0000h  IRQ: "
-msgIRQ		dw 3030h
-		db 0Dh, 0Ah, 0
-; 25/11/2023
-msgVRAheader	db " VRA support: "
-		db 0
-msgVRAyes	db "YES", 0Dh, 0Ah, 0
-		; 13/02/2025 (mp3play6.s)
-msgVRAno	db "NO ", 0Dh, 0Ah
-		db " (Interpolated sample rate playing method)"
-		db 0Dh, 0Ah, 0
-
-; ---------------------------------------------------------------------------
-
-; 24/11/2024
-msgSB16Info	db 0Dh, 0Ah
-		db " Audio Hardware: Sound Blaster 16", 0Dh, 0Ah
-		db "      Base Port: "
-msgBasePort	db "000h", 0Dh, 0Ah
-		db "            IRQ: "
-msgIRQnum	db 30h		; 12/01/2025
-crlf:		; 13/01/2025
-		db 0Dh, 0Ah, 0
 
 ; 13/01/2025
 ; ---------------------------------------------------------------------------
@@ -14359,7 +9419,8 @@ msg_no_vra:
 
 ; =============== S U B R O U T I N E =======================================
 
-
+		; 16/02/2025 (tmp3play.s)
+		; 10/02/2025 (twavply3.s)
 		; 13/02/2025 (mp3play6.s)
 		; 26/01/2025 (mp3play5.s)
 		; 24/12/2024 (vgaplay.s)
@@ -14372,7 +9433,7 @@ checkUpdateEvents:
 
 		push	eax ; *
 		or	eax, eax
-		jz	.c4ue_cpt
+		jz	short .c4ue_cpt
 
 		cmp	al, 20h ; SPACE (spacebar) ; pause/play
 		jne	short .c4ue_chk_s
@@ -14380,14 +9441,8 @@ checkUpdateEvents:
 		ja	short .c4ue_chk_ps
 		; pause
 		call	audio_f_pause
-.c4ue_0_ind:
-		; stopped/paused indicator
-		;mov	ax, 4E30h
-		;mov	[0B8000h], ax
-		; 26/01/2025
-		mov	bx, 0C30h
-		call	display_indicator
-		jmp	.c4ue_cpt
+
+		jmp	short .c4ue_cpt
 .c4ue_chk_ps:
 		cmp	byte [stopped], 1
 		ja	short .c4ue_replay
@@ -14410,9 +9465,13 @@ checkUpdateEvents:
 
 		cmp	byte [interpolation], 0
 		ja	short .c4ue_rp_indr
-		jmp	start.direct
+		;jmp	start.direct
+		; 16/02/2025
+		jmp	replay.direct
 .c4ue_rp_indr:
-		jmp	start.indirect
+		;jmp	start.indirect
+		; 16/02/2025
+		jmp	replay.indirect
 .c4ue_ok:
 		retn
 .c4ue_chk_s:
@@ -14422,36 +9481,24 @@ checkUpdateEvents:
 		ja	short .c4ue_cpt ; Already stopped/paused
 .c4ue_stop:
 		call	audio_f_stop
-		jmp	short .c4ue_0_ind
+		jmp	short .c4ue_cpt
 .c4ue_chk_fb:
 		cmp	al, 'F'
 		jne	short .c4ue_chk_b
-		call	Player_ProcessKey_Forwards
+		;call	Player_ProcessKey_Forwards
+		; 16/02/2025
+		call	move_forward
 		jmp	short .c4ue_cpt
 .c4ue_chk_b:
 		cmp	al, 'B'
-		; 13/02/2025
-		jne	short .c4ue_chk_cr
-		call 	Player_ProcessKey_Backwards
-		jmp	short .c4ue_cpt
-.c4ue_chk_cr:
-		cmp	al, 0Dh ; ENTER/CR key
+		; 16/02/2025
 		jne	short .c4ue_cpt
-		
-		xor	ebx, ebx
-		
-		;;;;
-		; 13/02/2025
-		mov	bl, [wpoints]
-		inc	ebx
-		and	bl, 07h
-		mov	[wpoints], bl
-		;;;;
-		mov	al, [ebx+colors]
-		; 24/12/2024
-		mov	[ccolor], al
+		;call 	Player_ProcessKey_Backwards
+		; 16/02/2025
+		call	move_backward
+		jmp	short .c4ue_cpt
 
-		; 13/02/2025
+		; 16/02/2025
 .c4ue_cpt:
 		sys	_time, 4 ; get timer ticks (18.2 ticks/second)
 		
@@ -14469,17 +9516,8 @@ checkUpdateEvents:
 		cmp	byte [stopped], 0
 		ja	short .c4ue_ok
 	
-		call	CalcProgressTime
-
-		cmp	eax, [ProgressTime]
-		je	short .c4ue_uwp
-				; same second, no need to update
-
-		call	UpdateProgressBar
-.c4ue_uwp:
-		;call	UpdateWavePoints
-		;retn
-		jmp	UpdateWavePoints
+		; 16/02/2025
+		jmp	drawscopes
 
 
 ; =============== S U B R O U T I N E =======================================
@@ -14488,6 +9526,7 @@ checkUpdateEvents:
 ; 22/01/2025 - Check for Keyboard Stop (Request)
 ; --------------------------------------------------------
 
+		; 16/02/2025
 		; 23/01/2025
 		; 22/01/2025
 check4keyboardstop:
@@ -14545,9 +9584,8 @@ check4keyboardstop:
 		jnb	short .p_3
 		inc	al
 .p_2:
+		; 16/02/2025
 		call	SetMasterVolume
-		jmp	UpdateVolume
-
 .cksr:
 		xor	eax, eax
 .p_3:
@@ -14589,9 +9627,11 @@ check4keyboardstop:
 ; 22/01/2025 - Goto Forward approx. 5 seconds
 ; --------------------------------------------------------
 
+		; 16/02/2025
+move_forward:
 		; 23/01/2025
 		; 22/01/2025
-Player_ProcessKey_Forwards:
+;Player_ProcessKey_Forwards:
 		;; 5 seconds forward
 		;;;;
 		;xor	ebp, ebp ; 0
@@ -14608,17 +9648,23 @@ Player_ProcessKey_Forwards:
 		mov	edx, ecx
 		sub	edx, [fb_count]
 		cmp	eax, edx
-		jna	short Player_ProcessKey_set_pos
+		;jna	short Player_ProcessKey_set_pos
+		; 16/02/2025
+		jna	short move_fwbw_set_pos
 .ppk_f@:
 		mov	eax, edx ; offset
-		jmp	short Player_ProcessKey_set_pos
+		;jmp	short Player_ProcessKey_set_pos
+		; 16/02/2025
+		jmp 	short move_fwbw_set_pos
 
 ; --------------------------------------------------------
 ; 22/01/2025 - Goto Backward approx. 5 seconds
 ; --------------------------------------------------------
 
+		; 16/02/2025
+move_backward:
 		; 22/01/2025
-Player_ProcessKey_Backwards:
+;Player_ProcessKey_Backwards:
 		;; 5 seconds backward
 		; 23/01/2025
 		;;;;
@@ -14633,15 +9679,19 @@ Player_ProcessKey_Backwards:
 		sub	eax, [bytes_left]
 		jna	short .ppk_bw@
 		sub	eax, edx
-		jnc	short Player_ProcessKey_set_pos
+		;jnc	short Player_ProcessKey_set_pos
+		; 16/02/2025
+		jnc	short move_fwbw_set_pos
 .ppk_bw@:
 		xor	eax, eax ; offset
 
 ; --------------------------------------------------------
 
+		; 16/02/2025
+move_fwbw_set_pos:
 		; 23/01/2025
 		; 22/01/2025
-Player_ProcessKey_set_pos:
+;Player_ProcessKey_set_pos:
 		pop	ebx ; *
 		; skip position change if audio interrupt occurs
 		; during this f/b procedure
@@ -14672,32 +9722,7 @@ Player_ProcessKey_set_pos:
 .ppk_sp@@:
 		; 23/01/2025
 		mov	[bytes_left], ecx
-if 0
-		;;;;
-		and	ebp, ebp
-		jnz	short .skip_1
 
-		cmp	byte [interpolation], 0
-		ja	short .f_next_x
-.f_next:
-		push	ecx
-		call	try_enqueue_all_blocks
-		pop	ecx
-		cmp	ecx, [bytes_left]
-		jb	short .f_next
-		jmp	short .skip_2
-.skip_1:
-		; 23/01/2025
-		mov	[bytes_left], ecx
-		jmp	short .skip_2
-.f_next_x:
-		push	ecx
-		call	try_enqueue_all_blocks_x
-		pop	ecx
-		cmp	ecx, [bytes_left]
-		jb	short .f_next_x
-.skip_2:
-end if
 		;;;;
 		; continue to playback
 		call	audio_f_play
@@ -14718,48 +9743,6 @@ end if
 		retn
 
 
-; ---------------------------------------------------------------------------
-; 25/01/2025 - Player Window Display Functions
-; ---------------------------------------------------------------------------
-; ref: vgaplay2.s (18/01/2025)
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 30/12/2024 (cgaplay.s)
-			; (VGA Mode 13h, 320*200 pixels, 256 colors)
-drawplayingscreen:
-		mov	ebp, PlayingScreen
-		mov	esi, 0 ; row 0, column 0
-p_d_x:
-		mov	byte [columns], 40
-		mov	dh, 01h ; 8x8 system font
-p_d_x_n:
-		mov	dl, [ebp] ; character
-		and	dl, dl
-		jz	short p_d_x_ok
-
-		; sysvideo system call
-		; BH = 01h = VGA graphics (0A0000h) data transfers
-		; BL = 0Fh = write character/font
-		; DH = 01h = 8*8 system font 
-		; CL = 0Fh = color (white)
-		; ESI = cursor/writing position (pixels)
-		;	HW = row, SI = column
-
-		sys	_video, 010Fh, 0Fh
-
-		inc	ebp
-		add	si, 8 ; next char pos
-		dec	byte [columns]
-		jnz	short p_d_x_n	; next column
-		xor	si, si
-		add	esi, 00080000h	; next row ; 8*8
-		jmp	short p_d_x
-p_d_x_ok:
-		retn
-
-
 ; =============== S U B R O U T I N E =======================================
 
 		; 25/01/2025
@@ -14773,6 +9756,7 @@ set_text_mode:
 
 ; =============== S U B R O U T I N E =======================================
 
+		; 16/02/2025 (tmp3play.s)
 		; 13/02/2025 (mp3play6.s)
 		; 30/12/2024 (cgaplay.s)
 		; 26/01/2025
@@ -14805,885 +9789,582 @@ SetTotalTime:
 		div	ebx ; 22/01/2025
 		; eax = total seconds
 
-		mov	[TotalTime], eax
-
 		mov	bl, 60
 		div	bl
 
-		;; al = minutes, ah = seconds
-		push	eax ; **
-		push	eax ; *
-
-		; 13/02/2025
-
-		;mov	dh, 24
-		; 21/12/2024 (640*480)
-		;mov	dh, 32
-		; 26/01/2025
-		;mov	dh, 33
-		;mov	dl, 42
-		; 30/12/2024 (320*200)
-		;mov	dh, 23
-		; 13/02/2025
-		mov	dh, 24
-		mov	dl, 22
-		call	setCursorPosition
-
-		pop	eax ; *
+		; al = minutes, ah = seconds
+	
+		; 15/02/2025
+		push	eax
+		mov	bl, 10
 		xor	ah, ah
-		mov	ebp, 2
-		call	PrintNumber
-
-		;mov	dh, 24
-		; 21/12/2024 (640*480)
-		;mov	dh, 32
-		; 26/01/2025
-		;mov	dh, 33
-		;mov	dl, 45
-		; 30/12/2024 (320*200)
-		;mov	dh, 23
-		; 13/02/2025
-		mov	dh, 24
-		mov	dl, 25
-		call	setCursorPosition
-
-		pop	eax ; **
-		mov	al, ah
-		xor	ah, ah
-		; 21/12/2024
-		mov	bp, 2
-		;jmp	short PrintNumber
-
-; =============== S U B R O U T I N E =======================================
-
-		; 26/01/2025
-		; 25/01/2025 (mp3play5.s)
-		; 22/12/2024 (vgaplay.s)
-		; 21/12/2024 (write numbers in VESA VBE graphics mode)
-PrintNumber:
-		; eax = binary number
-		; ebp = digits
-		mov	esi, [screenpos]
-			; hw = row, si = column
-		mov	ebx, 10
-		xor	ecx, ecx
-printNumber_CutNumber:
-		inc	ecx
-		xor	edx, edx
-		div	ebx
-		push	edx
-		cmp	ecx, ebp
-		je	short printNumber_printloop
-		jmp	printNumber_CutNumber
-
-printNumber_printloop:
+		div	bl
+		add	ah, '0'
+		mov	[msgMinSec+1], ah
+		and	al, al
+		jz	short .skip@@
+		sub	ah, ah
+		div	bl
+		add	ah, '0'
+		mov	[msgMinSec], ah
+.skip@@:
 		pop	eax
-		; 21/12/2024
-		; ebp = count of digits
-		; eax <= 9
-
-		add	al, '0'
-
-		; esi = pixel position (hw = row, si = column)
-		; eax = al = character
-		;call	write_character
-		; 22/12/2024
-		call	write_character_white
-
-		; 26/01/2025
-		add	esi, 8	; next column
-
-		dec	ebp
- 		jz	short printNumber_ok
-
-		jmp	short printNumber_printloop
-printNumber_ok:
-		; 26/01/2025
-		mov	[screenpos], esi
-
-		retn
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 30/12/2024 (cgaplay.s)
-		; 26/01/2025
-		; 25/01/2025 (mp3play5.s)
-		; 21/12/2024 (vgaplay.s)
-		; 21/01/2025 (mp3play4.s)
-SetProgressTime:
-		;; Calculate playing/progress seconds in file
-		call	CalcProgressTime
-
-UpdateProgressTime:
-		; eax = (new) progress time 
-
-		mov	[ProgressTime], eax
-
-		mov	bl, 60
-		div	bl
-
-		;; al = minutes, ah = seconds
-		push	eax ; **
-		push	eax ; *
-
-		; 13/02/2025
-
-		;mov	dh, 24
-		; 21/12/2024 (640*480)
-		;mov	dh, 32
-		; 26/01/2025
-		;mov	dh, 33
-		;mov	dl, 33
-		; 30/12/2024 (320*200)
-		;mov	dh, 23
-		; 13/02/2025
-		mov	dh, 24
-		mov	dl, 13
-		call	setCursorPosition
-
-		pop	eax ; *
-		xor	ah, ah
-		mov	ebp, 2
-		call	PrintNumber
-
-		;mov	dh, 24
-		; 21/12/2024 (640*480)
-		;mov	dh, 32
-		; 26/01/2025
-		;mov	dh, 33
-		;mov	dl, 36
-		; 30/12/2024 (320*200)
-		;mov	dh, 23
-		; 13/02/2025
-		mov	dh, 24
-		mov	dl, 16
-		call	setCursorPosition
-
-		pop	eax ; **
 		mov	al, ah
 		xor	ah, ah
-		; 
-		; 21/12/2024
-		mov	bp, 2
-		jmp	short PrintNumber
-
-; =============== S U B R O U T I N E =======================================
-
-		; 21/01/2025
-CalcProgressTime:
-		mov	eax, [stream_size] ; bytes
-		sub	eax, [bytes_left]
-		; 14/02/2025
-		;or	eax, eax
-		jz	short cpt_ok
-cpt_@:
-		mov	edx, 8 ; 1 byte = 8 bits
- 		mul	edx
-		div	dword [mp3_bit_rate] ; num of bits per sec
-		; eax = seconds
-cpt_ok:
-		; eax = (new) progress time
+		div	bl
+		add	ah, '0'
+		mov	[msgMinSec+4], ah
+		or	al, al
+		jz	short .return
+		sub	ah, ah
+		div	bl
+		add	ah, '0'
+		mov	[msgMinSec+3], ah
+.return:
 		retn
+	
 
 ; =============== S U B R O U T I N E =======================================
 
-		; 13/02/2025 (mp3play6.s)
-		; 26/01/2025
-		; 25/01/2025 (mp3play5.s)
-		; 26/12/2024 (vgaplay2.s)
-		; 24/01/2025 (mp3play4.s)
-		; 21/01/2025
-UpdateFileInfo:
-		;; Print File Name
-		;mov	dh, 7
-		mov	dh, 8 ; 26/01/2025
-		mov	dl, 22
-		; 30/12/2024 (320*200, video mode 13h)
-		mov	dh, 6
-		;mov	dl, 7
-		; 13/02/2025
-		mov	dl, 8
-		call	setCursorPosition
+		; 15/02/2025
+write_mp3_file_info:
+		sys	_msg, msgFileName, 255, 0Fh
+		sys	_msg, mp3_file_name, 255, 0Fh
+write_sample_rate:
+		mov	eax, [mp3_sample_rate]
+		; ax = sample rate (hertz)
+		xor	edx, edx
+		mov	cx, 10
+		div	cx
+		add	[msgHertz+4], dl
+		sub	edx, edx
+		div	cx
+		add	[msgHertz+3], dl
+		sub	edx, edx
+		div	cx
+		add	[msgHertz+2], dl
+		sub	edx, edx
+		div	cx
+		add	[msgHertz+1], dl
+		add	[msgHertz], al
+	
+		sys	_msg, msgSampleRate, 255, 0Fh
 
-		mov	esi, [mp3_src_fname]
-
-		;;;
-		; skip directory separators
-		; (note: asciiz string, max. 79 bytes except zero tail)
-		mov	ebx, esi
-chk4_nxt_sep:
-		lodsb
-		cmp	al, '/'
-		je	short chg_fpos
-		and	al, al
-		jz	short chg_fpos_ok
-		jmp	short chk4_nxt_sep
-chg_fpos:
-		mov	ebx, esi
-		jmp	short chk4_nxt_sep
-chg_fpos_ok:
-		mov	esi, ebx ; file name (without its path/directory)
-		;;;
-_fnl_chk:
-		; 13/02/2025
-		; 26/12/2024 (file name length limit -display-)
-		mov	ebx, 12
-		; 25/01/2025
-		;mov	ebx, 17 ; ????????.mp3?????
-		push	esi
-_fnl_chk_loop:
-		lodsb
-		and	al, al
-		jz	short _fnl_ok
- 		dec	ebx
-		jnz	short _fnl_chk_loop
-		mov	byte [esi], 0
-_fnl_ok:
-		pop	esi
-		;;;
-
-		call	PrintString
-
-		; 24/01/2025
-		;; Print File Size
-		;mov	dh, 7
-		;mov	dh, 8 ; 26/01/2025
-		;mov	dl, 56
-		; 13/02/2025
-		mov	dh, 6
-		mov	dl, 28
-		call	setCursorPosition
-
-		;;;; 24/01/2025 - Erdogan Tan
-                mov     eax, [mp3_file_size]
-
-		; 26/01/2025
-		;call	cfs	
-		call	convert_to_string
-
-		;mov	esi, txtfilesize
-		call	PrintString
-		;;;;
-
-		; 24/01/2025
-		;; Print Input Frequency
-		; 13/02/2025
-		;mov	dh, 8
-		;mov	dh, 9 ; 26/01/2025
-		;mov	dl, 22
-		mov	dh, 7
-		mov	dl, 8
-		call	setCursorPosition
-
-		mov     eax, [mp3_sample_rate]
-		mov	ebp, 5
-		call	PrintNumber
-		
-		; 23/01/2025
-		;; Print Output Frequency
-		; 13/02/2025
-		;mov	dh, 8
-		;mov	dh, 9 ; 26/01/2025
-		;mov	dl, 56
-		mov	dh, 7
-		mov	dl, 28
-		call	setCursorPosition
-
-		mov	eax, [mp3_output_sample_rate]
-		mov	bp, 5
-		call	PrintNumber
-
-		; 24/01/2025
-		;; Print Input Channels Number
-		; 13/02/2025
-		;mov	dh, 9
-		;mov	dh, 10 ; 26/01/2025
-		;mov	dl, 22
-		; 13/02/2025
-		mov	dh, 8
-		mov	dl, 8
-		call	setCursorPosition
-
-                mov     eax, [mp3_src_num_channels]
-		mov	bp, 1
-		call	PrintNumber
-              
-		; 23/01/2025
-		;; Print Output Channels Number
-		; 13/02/2025
-		;mov	dh, 9
-		;mov	dh, 10 ; 26/01/2025
-		;mov	dl, 56
-		; 13/02/2025
-		mov	dh, 8
-		mov	dl, 28
-		call	setCursorPosition
-
-		mov	eax, [mp3_output_num_channels]
-		mov	bp, 1
-		call	PrintNumber
-
-		; 24/01/2025
-		;; Print Input BitRate
-		; 13/02/2025
-		;mov	dh, 10
-		;mov	dh, 11 ; 26/01/2025
-		;mov	dl, 22
-		; 13/02/2025
-		mov	dh, 9
-		mov	dl, 8
-		call	setCursorPosition
-
-                mov     eax, [mp3_bit_rate]
+		mov     eax, [mp3_bit_rate]
                 xor     edx, edx
                 mov     ecx, 1000
                 div     ecx
-		mov	bp, 3
-		call	PrintNumber
-
-                mov     esi, txt_kbit_s ; " kbit/s"
-		call	PrintString
-
-		; 23/01/2025
-		;; Print Output BitRate
-		; 13/02/2025
-		;mov	dh, 10
-		;mov	dh, 11 ; 26/01/2025
-		;mov	dl, 56
-		mov	dh, 9 
-		mov	dl, 28
-		call	setCursorPosition
-
-		mov	eax, [mp3_bytes_per_sample]
-		shl	eax, 3 ; * 8
-		mov	bp, 2
-		call	PrintNumber
-
-		;call	UpdateVolume
-		;retn
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 30/12/2024 (cgaplay.s)
-		; 26/01/2025
-		; 21/01/2025
-UpdateVolume:
-		;; Print Volume
-		;mov	dh, 24
-		; 26/01/2025 (640*480)
-		;mov	dh, 32
-		; 23/02/2025
-		;mov	dh, 33
-		;mov	dl, 75
-		; 13/02/2025
-		; 30/12/2024 (320*200, video mode 13h)
-		;mov	dh, 23
-		; 13/02/2025
-		mov	dh, 24
-		mov	dl, 35
-		call	setCursorPosition
-
-		mov	al, [volume_level]
-
-		mov	bl, 100
-		mul	bl
-
-		mov	bl, 31
-		div	bl
-
-		mov	ah, 100
-		sub	ah, al
-		movzx	eax, ah
-		mov	ebp, 3
-		;call	PrintNumber
-		;retn
-		jmp	PrintNumber	
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 25/01/2025 (mp3play5.s)
-		; 21/12/2024 (vgaplay.s)
-		; write text in VESA VBE graphics mode
-PrintString:
-		; esi = string address
-printstr_loop:
-		xor	eax, eax
-		lodsb
-		or	al, al
-		jz	short printstr_ok
-
-		push	esi
-
-		mov	esi, [screenpos]
-
-		; esi = pixel position (hw = row, si = column)
-		; eax = al = character
-		;call	write_character
-		; 22/12/2024
-		call	write_character_white
-
-		add	word [screenpos], 8 ; update column (only, not row)
-
-		pop	esi
-		jmp	short printstr_loop
-
-printstr_ok:
-		retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 30/12/2024 (cgaplay.s)
-		; write character (at cursor position)
-		; in video mode 13h (320*200, 256 colors)
-		; 21/12/2024
-		; write character (at cursor position)
-		; in graphics mode (640*480, 256 colors)
-		; 22/12/2024
-write_character_white:
-		mov	ecx, 0Fh
-		; 26/12/2024
-		;movzx	ecx, byte [tcolor]
-write_character:
-		; esi = pixel position (hw = row, si = column)
-		; eax = al = character
-		; cl = color
-		mov	[wcolor], ecx ; 22/12/2024
-
-		; 22/12/2024
-		push	eax
-		; clear previous character pixels
-		mov	edi, fillblock
-		;;sys	_video, 020Fh, 0, 8001h
-		; 30/12/2024
-		sys	_video, 010Fh, 0, 8000h ; 8*8 userfont
-		pop	eax
-
-		; 30/12/2024
-		;shl	eax, 4 ; 8*16 pixel user font
-		;mov	edi, fontbuff2 ; start of user font data
-		;add	edi, eax
-
-		; 21/12/2024
-		; NOTE:
-		; TRDOS 386 does not use 8*14 pixel fonts in sysvideo
-		; system calls -in graphics mode-
-		; because 8*16 pixel operations are faster
-		;			than 8*14 pixel operations.
-		; ((so, 8*14 fonts can be converted to 8*16 fonts by
-		; adding 2 empty lines))
-		; (8*14 characters can be written via pixel operations)
-
-		; 21/12/2024 (TRDOS 386 v2.0.9, trdosk6.s, 27/09/2024)
-		;;;;;;;;;;;;;;;;; ; sysvideo system call
-		;sysvideo:
-		;   function in BH
-		;	02h: Super VGA, LINEAR FRAME BUFFER data transfers
-		;   sub function in BL
-		;	0Fh: WRITE CHARACTER (FONT)
-		;          CL = char's color (8 bit, 256 colors)
-		;	If DH bit 7 = 1
-		;	   USER FONT (from user buffer)
-		;	         DL = 1 -> 8x16 pixel font
- 		;	   EDI = user's font buffer address
-		;		(NOTE: byte order is as row0,row1,row2..)
-		;	   ESI = start position (row, column)
-		;		(HW = row, SI = column)
-		;;;;;;;;;;;;;;;;;
-
-		;sys	_video, 020Fh, [wcolor], 8001h
-
-		; 30/12/2024
-		; sysvideo system call
-		; BH = 01h = VGA graphics (0A0000h) data transfers
-		; BL = 0Fh = write character/font
-		; DH = 01h = 8*8 system font 
-		; CL = [wcolor] = color
-		; ESI = cursor/writing position (pixels)
-		;	HW = row, SI = column
-		; DL = character (ASCII code)
-
-		mov	ah, 01h ; 8*8 pixels
-
-		sys	_video, 010Fh, [wcolor], eax
-
-		retn
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 30/12/2024 (cgaplay.s)
-		; 	write characters in video mode 13h
-		; 	(320*200 pixels, 256 colors)
-		; 26/01/2025
-		; 25/01/2025 (mp3play5.s)
-		; 22/12/2024 (vgaplay.s)
-		; 22/01/2025
-		; 21/01/2025 (mp3play4.s)
-
-		; 13/02/2025
-		PROGRESSBAR_ROW equ 23
-		; 21/12/2024 (640*480)
-		;PROGRESSBAR_ROW equ 31
-		; 26/01/2025
-		;PROGRESSBAR_ROW equ 32
-		; 30/12/2024 (320*200)
-		;PROGRESSBAR_ROW equ 22
-
-UpdateProgressBar:
-		call	SetProgressTime
-
-		mov	eax, [ProgressTime]
-UpdateProgressBar@:
-		;mov	edx, 80
-		; 13/02/2025
-		mov	edx, 40
-		mul	edx
-		;mov	ebx, [TotalTime]
-		;div	ebx
-		; 22/01/2025
-		div	dword [TotalTime]
-
-		; 25/01/2025
-		; 22/12/2024
-		; check progress bar indicator position if it is same 
-		cmp	al, [pbprev]
-		je	short UpdateProgressBar_ok
-		mov	[pbprev], al
-
-UpdateProgressBar@@:
-		;; Push for the 'Clean' part
-		push	eax ; **
-		push	eax ; *
-
-		;; Set cursor position
-		mov	dh, PROGRESSBAR_ROW
-		mov	dl, 0
-		call	setCursorPosition
-
-		pop	eax ; *
+		mov	edi, txtSize
+		mov	ebp, esp
+		mov	ecx, 10
+kbits_1:
+  		xor	edx, edx
+		div	ecx
+		add	dl, 30h ; '0'
+		push	edx
 		or	eax, eax
-		jz	short UpdateProgressBar_Clean
+		jnz	short kbits_1
+kbits_2:
+		pop	edx
+		mov	al, dl
+		stosb
+		cmp	esp, ebp
+ 		jne	short kbits_2
+		mov	al, 0
+		stosb
 
-UpdateProgressBar_DrawProgress:
-		; 22/12/2024
-		; 21/12/2024
-		; (write progress bar chars in graphics mode)
-		;;;;
-		mov	ebp, eax
-		push	eax ; ***
-		mov	esi, [screenpos]
-UpdateProgressBar_DrawProgress_@:
-		mov	eax, 223
+		sys	_msg, msgKBitRate, 255, 0Fh
 
-		; esi = pixel position (hw = row, si = column)
-		; eax = al = character
-		;call	write_character
-		; 22/12/2024
-		call	write_character_white
+		sys	_msg, txtSize, 255, 0Fh
 
-		dec	ebp
-		jz	short UpdateProgressBar_DrawCursor
+		sys	_msg, msgKBits, 255, 0Fh
 
-		add	esi, 8 ; next column
-		jmp	short UpdateProgressBar_DrawProgress_@
-		;;;
+		sys	_msg, msgPlayback, 255, 0Fh
 
-		; 25/01/2025
-		; 22/12/2024
-UpdateProgressBar_ok:
-		retn
-
-		; 25/01/2025
-
-UpdateProgressBar_DrawCursor:
-		; 22/12/2024
-		pop	edx ; ***
-		mov	dh, PROGRESSBAR_ROW
-		call	setCursorPosition
-
-		; 21/12/2024
-		; (write progress bar character in graphics mode)
-		;;;;
-		;;;mov	eax, 223
-		;;;shl	eax, 4 ; 8*16 pixel user font
-		;;mov	eax, 223*16
-		;;mov	edi, fontbuff2 ; start of user font data
-		;;add	edi, eax
-		;mov	edi, fontbuff2+(223*16)
-		;
-		;sys	_video, 020Fh, 0Ch, 8001h
-		; 22/12/2024
-		;mov	eax, 223
-		; eax = 0
-		mov	al, 223
-		mov	cl, 0Ch ; red
-		call	write_character
-		;;;;
-
-UpdateProgressBar_Clean:
-		;pop	eax  ; **
-		; 22/12/2024
-		pop	edx  ; **
-		; 21/12/2024
-		;mov	ebp, 80
-		; 30/12/2024
-		mov	ebp, 40 ; 40 columns (320*200 pixels)
-		;sub	bp, ax
-		; 13/02/2025
-		sub	ebp, edx ; 22/12/2024
-		jz	short UpdateProgressBar_ok
-
-		mov	dh, PROGRESSBAR_ROW
-		;mov	dl, al ; 22/12/2024
-		call	setCursorPosition
-
-		; 21/12/2024
-		; (write progress bar chars in graphics mode)
-		;;;;
-		mov	esi, [screenpos]
-UpdateProgressBar_Clean_@:
-		;;;mov	eax, 223
-		;;;shl	eax, 4 ; 8*16 pixel user font
-		;;mov	eax, 223*16
-		;mov	edi, fontbuff2 ; start of user font data
-		;add	edi, eax
-		;mov	edi, fontbuff2+(223*16)
-		;
-		;sys	_video, 020Fh, 08h, 8001h
-		; 22/12/2024
-		;mov	eax, 223
-		; eax = 0
-		mov	al, 223
-		mov	cl, 08h ; gray (dark)
-		call	write_character
-		;;;;
-
-		dec	ebp
-		jz	short UpdateProgressBar_ok
-
-		add	esi, 8 ; next column
-		jmp	short UpdateProgressBar_Clean_@
-		;;;;
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 30/12/2024 (cgaplay.s)
-		; simulate cursor position in VGA mode 13h
-		; ! for 320*200, 256 colors (1 byte/pixel) !
-setCursorPosition:
-		; dh = Row
-		; dl = Column
-
-		xor	eax, eax
-		; row height is 8 pixels (8*8)
-		mov	al, dh
-		;shl	eax, 3
-		; 13/02/2025
-		;add	ax, 2	; top margin
-		;shl	eax, 16
-		shl	eax, 19
-		mov	al, dl	; * 8 ; character width = 8 pixels
-		shl	ax, 3
-				; hw = row, ax = column
-		mov	[screenpos], eax
-		; 22/12/2024
-		xor	eax, eax
-		retn
-
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 26/01/2025 (mp3play5.s)
-		; 26/12/2024 (vgaplay2.s)
-		; 24/12/2024
-UpdateWavePoints:
-		call	get_current_sounddata
-
-		mov	esi, prev_points
-		;mov	ebp, 640
-		; 13/02/2025
-		mov	ebp, 320
-		cmp	dword [esi], 0
-		jz	short .lights_off_ok
-		mov	ecx, ebp ; 320
-.light_off:
-		lodsd
-		; eax = wave point (lighting point) address
-		mov	byte [eax], 0 ; black point (light off)
-		loop	.light_off
-.lights_off_ok:
-		; 26/01/2025
-		mov	esi, sounddata
-		mov	edi, prev_points
-		mov	ecx, ebp ; 320 ; 13/02/2025
-		; 13/02/2025
-		;mov	ebx, [graphstart] ; start (top) line
-		mov	ebx, GRAPHSTART
-
-		jmp	dword [draw_wave_points]
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 30/12/2024 (cgaplay.s)
-		;  * 320*200 pixels, 256 colors
-		;  * 64 volume levels
-		; 26/01/2025 (mp3play5.s)
-		; 26/12/2024 (vgaplay2.s)
-		; 24/12/2024
-UpdateWavePoints_16s:
-		; 26/01/2025
-		;mov	esi, sounddata
-		;mov	edi, prev_points
-		;;mov	ecx, 640
-		;mov	ecx, 320 ; 13/02/2025
-		;mov	ebp, ecx
-		;;mov	ebx, [graphstart] ; start (top) line
-		; 13/02/2025
-		;mov	ebx, GRAPHSTART
-.lights_on:
-		xor	eax, eax ; 0
-		lodsw	; left
-		add	ah, 80h
-		mov	edx, eax
-		lodsw	; right
-		add	ah, 80h
-		add	eax, edx
-		shr	eax, 9	; (L+R/2) & 256 volume levels
-		; 26/01/2025
-		sub	al, 255	; max. value will be shown on top
-		; 13/02/2025
-		shr	eax, 2	; 64 volume levels
-		mul	ebp	; * 640 (row)
-		add	eax, ebx ; + column
-		mov	dl, [ccolor]
-		mov	[eax], dl ; pixel (light on) color
-		stosd		; save light on addr in prev_points
-		inc	ebx
-		loop	.lights_on
-		retn
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 30/12/2024 (cgaplay.s)
-		;  * 320*200 pixels, 256 colors
-		;  * 64 volume levels
-		; 26/01/2025 (mp3play5.s)
-UpdateWavePoints_16m:
-		; 26/01/2025
-		;mov	esi, sounddata
-		;mov	edi, prev_points
-		;;mov	ecx, 640
-		;mov	ecx, 320 ; 13/02/2025
-		;mov	ebp, ecx
-		;;mov	ebx, [graphstart] ; start (top) line
-		; 13/02/2025
-		;mov	ebx, GRAPHSTART
-.lights_on:
-		lodsw
-		add	ah, 80h
-		shr	eax, 8	; 256 volume levels
-		sub	al, 255	; max. value will be shown on top
-		; 13/02/2025
-		shr	eax, 2	; 64 volume levels
-		mul	ebp	; * 640 (row)
-		add	eax, ebx ; + column
-		mov	dl, [ccolor]
-		mov	[eax], dl ; pixel (light on) color
-		stosd		; save light on addr in prev_points
-		inc	ebx
-		loop	.lights_on
-		retn
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 30/12/2024 (cgaplay.s)
-		;  * 320*200 pixels, 256 colors
-		;  * 64 volume levels
-		; 26/01/2025 (mp3play5.s)
-UpdateWavePoints_8s:
-		; 26/01/2025
-		;mov	esi, sounddata
-		;mov	edi, prev_points
-		;;mov	ecx, 640
-		;mov	ecx, 320 ; 13/02/2025
-		;mov	ebp, ecx
-		;;mov	ebx, [graphstart] ; start (top) line
-		; 13/02/2025
-		;mov	ebx, GRAPHSTART
-.lights_on:
-		xor	eax, eax ; 0
-		lodsb	; left
-		mov	edx, eax
-		lodsb	; right
-		add	eax, edx
-		shr	eax, 1 ; (L+R/2)
-		sub	al, 255	; max. value will be shown on top
-		; eax = 0 to 255 ; 256 volume levels
-		; 13/02/2025
-		shr	eax, 2	; 64 volume levels
-		mul	ebp	; * 320 (row)
-		add	eax, ebx ; + column
-		mov	dl, [ccolor]
-		mov	[eax], dl ; pixel (light on) color
-		stosd		; save light on addr in prev_points
-		inc	ebx
-		loop	.lights_on
-		retn
-
-; =============== S U B R O U T I N E =======================================
-
-		; 13/02/2025 (mp3play6.s)
-		; 30/12/2024 (cgaplay.s)
-		;  * 320*200 pixels, 256 colors
-		;  * 64 volume levels
-		; 26/01/2025 (mp3play5.s)
-UpdateWavePoints_8m:
-		; 26/01/2025
-		;mov	esi, sounddata
-		;mov	edi, prev_points
-		;;mov	ecx, 640
-		;mov	ecx, 320 ; 13/02/2025
-		;mov	ebp, ecx
-		;;mov	ebx, [graphstart] ; start (top) line
-		; 13/02/2025
-		;mov	ebx, GRAPHSTART
-.lights_on:
-		xor	eax, eax
-		lodsb
-		sub	al, 255	; max. value will be shown on top
-		; eax = 0 to 255 ; 256 volume levels
-		; 13/02/2025
-		shr	eax, 2	; 64 volume levels
-		mul	ebp	; * 320 (row)
-		add	eax, ebx ; + column
-		mov	dl, [ccolor]
-		mov	[eax], dl ; pixel (light on) color
-		stosd		; save light on addr in prev_points
-		inc	ebx
-		loop	.lights_on
-		retn
+		mov	esi, msg16Bits
 		
+		; 17/02/2025
+		;	[mp3_bytes_per_sample] = 2
+		;
+		;cmp	byte [mp3_bytes_per_sample], 2
+		;je	short wsr_1
+		;mov	esi, msg8Bits
+wsr_1:
+		sys	_msg, esi, 255, 0Fh
+
+		mov	esi, msgMono
+		cmp	byte [mp3_num_channels], 1
+		je	short wsr_2
+		mov	esi, msgStereo
+wsr_2:
+		sys	_msg, esi, 255, 0Fh
+
+		sys	_msg, msgDuration, 255, 0Fh
+		retn
+
+;=============================================================================
+; drawscopes - draw wave/voice sample scopes
+;=============================================================================
+
+	; 15/02/2025	
+	; 10/02/2025 - twavply3.s (32 bit)
+	; 09/02/2025 - twavplay.asm (16bit)
+	; 05/02/2025 - twavplay2.s
+drawscopes:
+	;call	get_current_sound_data
+	; 15/02/2025
+	call	dword [get_sound_data]
+	mov	esi, sounddata
+
+	xor     ecx, ecx
+	xor     edx, edx
+	xor	edi, edi
+drawscope0:
+	lodsw
+	xor	ah, 80h
+	movzx	ebx, ah	; Left Channel
+	shl	ebx, 1
+	mov	ax, [RowOfs+ebx]
+	mov	[NewScope_L+edi], ax
+	xor	bh, bh
+	lodsw
+	xor	ah, 80h
+	mov	bl, ah	; Right Channel
+	shl	ebx, 1
+	mov	ax, [RowOfs+ebx]
+	mov	[NewScope_R+edi], ax
+	add	di, 2
+	inc	cl
+	jnz	short drawscope0
+
+	mov	dx, 3C4h
+	;mov	ax, 0802h
+        ;out	dx, ax
+        mov	bx, 0802h
+	mov	ah, 3 ; outw
+	int	34h
+
+	;mov	dx, 3CEh
+	mov	dl, 0CEh
+	mov	al, 08h
+       ;out	dx, al
+        mov	ah, 1 ; outb
+	int	34h
+
+	inc	edx
+
+	xor	esi, esi
+	mov	ebx, 0A0645h
+drawscopel4:
+	mov     al, 80h
+drawscopel2:
+	push	eax ; **
+	push	edx ; *
+	;out	dx, al
+	mov	ah, 1 ; outb
+	int	34h
+
+	;mov	ecx, 32
+	mov	cl, 32
+	mov	ax, 0FF00h
+drawscopel3:
+        mov	di, [OldScope_L+esi]
+	mov	dx, [NewScope_L+esi]
+        cmp	edi, edx
+        je	short drawscopef3
+	mov	[ebx+edi], al ; L
+	mov	[ebx+edx], ah ; L
+        mov     [OldScope_L+esi], dx
+drawscopef3:
+	mov	di, [OldScope_R+esi]
+	mov	dx, [NewScope_R+esi]
+	cmp	edi, edx
+	je	short drawscopef4
+	mov	[ebx+edi+38], al ; R
+	mov	[ebx+edx+38], ah ; R
+	mov     [OldScope_R+esi], dx
+drawscopef4:
+	add	esi, 2*8
+	inc	ebx
+	loop    drawscopel3
+
+        pop     edx ; *
+        pop     eax ; **
+	sub	esi, 2*256-2
+	sub	ebx, 32
+        shr     al, 1
+        jnz	short drawscopel2
+	clc
+        retn
+
+
 ; =============== S U B R O U T I N E =======================================
 
 ; --------------------------------------------------------
-; 22/01/2025 - Get Current Sound Data For Graphics
+; 15/02/2025 - Get Current Sound Data For Graphics
 ; --------------------------------------------------------
-; ref: cgaplay2.s (08/01/2025)
 
-	; 13/02/2025 (mp3play6.s)
-get_current_sounddata:
+	; 15/02/2025 (tmp3play.s)
+get_ac97_sound_data:
+	; [sd_count] = 1024
 	sys	_audio,	0F00h, [sd_count], sounddata
 	retn
+
+; --------------------------------------------------------
+
+	; 15/02/2025 (tmp3play.s)
+get_sb16_sound_data:
+	mov	esi, sounddata2
+	sys	_audio,	0F00h, [sd_count], esi
+	mov	edi, sounddata
+	jmp	dword [sounddata_copy]
+
+; --------------------------------------------------------
+
+;	; 15/02/2025
+;	; 10/02/2025 - twavply3.s (32bit)
+;	; 09/02/2025 - twavplay.asm (16bit)
+;sdc_16bit_stereo:
+;	; esi = source/dma sound data buffer address
+;	; ecx =	load (source) count = 1024
+;	; edi = target sound data buffer
+;	;shr	ecx, 1
+;	;rep	movsw
+;	shr	ecx, 2
+;	rep	movsd
+;	retn
+
+; --------------------------------------------------------
+
+	; 15/02/2025
+	; 10/02/2025 - twavply3.s (32bit)
+	; 09/02/2025 - twavplay.asm (16bit)
+sdc_16bit_mono:
+	; esi = source/dma sound data buffer address
+	; ecx = load (source) count = 512
+	; edi = target sound data buffer
+	shr	ecx, 1
+sdc_16bm_loop:
+	lodsw
+	stosw
+	stosw
+	loop	sdc_16bm_loop
+	retn
+
+; --------------------------------------------------------
+
+	; 15/02/2025
+	; 10/02/2025 - twavply3.s (32bit)
+	; 09/02/2025 - twavplay.asm (16bit)
+sdc_8bit_stereo:
+	; esi = source/dma sound data buffer address
+	; ecx = load (source) count = 512
+	; edi = target sound data buffer
+
+	; convert to 16 bit sample
+sdc_8bs_loop:
+	lodsb
+	sub	al, 80h ; middle = 0, min = -128, max = 127
+	shl	ax, 8
+	stosw
+	loop	sdc_8bs_loop
+	retn
+
+; --------------------------------------------------------
+
+	; 15/02/2025
+	; 10/02/2025 - twavply3.s (32bit)
+	; 09/02/2025 - twavplay.asm (16bit)
+sdc_8bit_mono:
+	; esi = source/dma sound data buffer
+	; ecx = load (source) count = 256
+	; edi = target sound data buffer
+
+	; convert to 16 bit sample
+sdc_8bm_loop:
+	lodsb
+	sub	al, 80h ; middle = 0, min = -128, max = 127
+	shl	ax, 8
+	stosw	; L
+	; convert to stereo
+	stosw	; R
+	loop	sdc_8bm_loop
+	retn
+
+; =============== S U B R O U T I N E =======================================
+
+		; 16/02/2025
+print_err_msg:
+		sys	_msg, esi, 255, 0Ch
+		stc	; (needed)	
+		retn
+
+;-----------------------------------------------------------------------------
+
+; 16/02/2025
+; 10/02/2025 (twavply3.s)
+;=============================================================================
+;	Load IFF/ILBM files for VGA 640x480x16 graphics mode
+;=============================================================================
+
+; EX1B.ASM (21/6/1994, Carlos Hasan; MSDOS, 'RUNME.EXE', 'TNYPL211')
+
+; 21/10/2017 (TRDOS 386, 'tmodplay.s', Erdogan Tan, NASM syntax)
+
+;-----------------------------------------------------------------------------
+; EQUATES AND STRUCTURES
+;-----------------------------------------------------------------------------
+
+ID_FORM equ 4D524F46h		; IFF/ILBM chunk IDs
+ID_ILBM equ 4D424C49h
+ID_BMHD equ 44484D42h
+ID_CMAP equ 50414D43h
+ID_BODY equ 59444F42h
+
+struc Form			; IFF/ILBM header file format
+  .ID:		resd 1
+  .Length:	resd 1
+  .Type:	resd 1
+  .size:
+endstruc
+
+struc Chunk			; IFF/ILBM header chunk format
+  .ID:		resd 1
+  .Length:	resd 1
+  .size:
+endstruc
+
+struc BMHD			; IFF/ILBM BMHD chunk format
+  .Width: 	resw 1
+  .Height:	resw 1
+  .PosX:	resw 1
+  .PosY:	resw 1
+  .Planes:	resb 1
+  .Masking:	resb 1
+  .Compression:	resb 1
+  .Pad:		resb 1
+  .Transparent:	resw 1
+  .AspectX	resb 1
+  .AspectY:	resb 1
+  .PageWidth:	resw 1
+  .PageHeight:	resw 1
+  .size:
+endstruc
+
+struc CMAP			; IFF/ILBM CMAP chunk format
+  .Colors:	resb 768
+  .size:
+endstruc
+
+;------------------------------------------------------------------------------
+; bswap - macro to reverse the byte order of a 32-bit register, converting
+;         a value in little/big endian form to big/little endian form.
+;------------------------------------------------------------------------------
+
+%macro	bswap   1
+	xchg    al, ah
+	rol     eax, 16
+	xchg    al, ah
+%endmacro
+
+; ---------------------------------------------------------------------------
+; 25/01/2025 - Player Window Display Functions
+; ---------------------------------------------------------------------------
+; ref: vgaplay2.s (18/01/2025)
+
+; =============== S U B R O U T I N E =======================================
+
+		; 15/02/2025
+drawplayingscreen:
+		; 10/02/2025 - twavply3.s
+		; 05/02/2025 - twavply2.s
+putlbm:
+		mov	esi, LOGO_ADDRESS
+	
+		;pushad
+
+; check if this is a valid IFF/ILBM Deluxe Paint file
+
+		;cmp	dword [esi+Form.ID], ID_FORM
+		;jne	short putlbmd0
+		;cmp	dword [esi+Form.Type], ID_ILBM
+		;jne	short putlbmd0
+
+; get the IFF/ILBM file length in bytes
+
+		mov	eax, [esi+Form.Length]
+		bswap	eax
+		mov	ecx, eax
+
+; decrease the file length and updates the file pointer
+
+		sub	ecx, 4
+		add	esi, Form.size
+
+; IFF/ILBM main parser body loop
+
+putlbml0:
+		test	ecx, ecx
+		jle	short putlbmd1
+
+; get the next chunk ID and length in bytes
+
+		mov	ebx, [esi+Chunk.ID]
+		mov	eax, [esi+Chunk.Length]
+		bswap	eax
+		xchg	ebx, eax
+		add	esi, Chunk.size
+
+; word align the chunk length and decrease the file length counter
+
+		inc	ebx
+		and	bl, 0FEh ; ~1
+		sub	ecx, Chunk.size
+		sub	ecx, ebx
+
+; check for the BMHD/CMAP/BODY chunk headers
+
+		cmp	eax, ID_BMHD
+		je	short putlbmf0
+		cmp	eax, ID_CMAP
+		je	short putlbmf1
+		cmp	eax, ID_BODY
+		je	short putlbmf2
+
+; advance to the next IFF/ILBM chunk structure
+
+putlbmc0:
+		add	esi, ebx
+		jmp	short putlbml0
+
+putlbmd0:
+		stc
+		;popad
+		retn
+
+; process the BMHD bitmap header chunk
+
+putlbmf0:
+		cmp	byte [esi+BMHD.Planes], 4
+		jne	short putlbmd0
+		cmp	byte [esi+BMHD.Compression], 1
+		jne	short putlbmd0
+		cmp	byte [esi+BMHD.Pad], 0
+		jne	short putlbmd0
+		movzx	eax, word [esi+BMHD.Width]
+		xchg	al, ah
+		add	eax, 7
+		shr	eax, 3
+		mov	[picture.width], eax
+		movzx	eax, word [esi+BMHD.Height]
+		xchg	al, ah
+		mov	[picture.height], eax
+		jmp	short putlbmc0
+
+putlbmd1:
+		clc
+		;popad
+		retn
+
+; process the CMAP colormap chunk
+
+putlbmf1:
+		mov	dx, 3C8h
+		xor	al, al
+		;out	dx, al
+		mov	ah, 1 ; outb
+		int	34h
+		;inc	dx
+		inc	edx
+putlbml1:
+		mov	al, [esi]
+		shr	al, 2
+		;out	dx, al
+		;mov	ah, 1 ; outb
+		int	34h ; IOCTL interrupt (IN/OUT)
+		inc	esi
+		dec	ebx
+		jg	short putlbml1
+		jmp	putlbml0
+
+; process the BODY bitmap body chunk
+
+putlbmf2:
+		pushad
+		mov	edi, 0A0000h
+		;cld
+		mov	dx, 3CEh
+		;mov	ax, 0FF08h
+		;out	dx, ax
+		mov	bx, 0FF08h
+		mov	ah, 3 ; outw
+		int	34h ; IOCTL interrupt (IN/OUT)
+		;mov	dx, 3C4h
+		mov	dl, 0C4h
+		mov	al, 02h
+		;out	dx, al
+		mov	ah, 1 ; outb
+		int	34h ; IOCTL interrupt (IN/OUT)
+		;inc	dx
+		inc	edx
+		mov	ecx, [picture.height]
+putlbml2:
+		push	ecx
+		mov	al, 11h
+putlbml3:
+		push	eax
+		push	edi
+		;out	dx, al
+		mov	ah, 1 ; outb
+		int	34h ; IOCTL interrupt (IN/OUT)
+		mov	ebx, [picture.width]
+putlbml4:
+		lodsb
+		xor	ecx, ecx
+		test	al, al
+		jl	short putlbmf3
+		;movzx	ecx, al
+		mov	cl, al
+		inc	ecx
+		sub	ebx, ecx
+		rep	movsb
+		jmp	short putlbmc4
+putlbmf3:
+		neg	al
+		;movzx	ecx, al
+		mov	cl, al
+		inc	ecx
+		sub	ebx, ecx
+		lodsb
+		rep	stosb
+putlbmc4:
+		test	ebx, ebx
+		jg	short putlbml4
+		pop	edi
+		pop	eax
+		add	al, al
+		jnc	short putlbml3
+		add	edi, 80
+		pop	ecx
+		loop	putlbml2
+		popad
+		jmp	putlbmc0
+
+; ---------------------------------------------------------------------------
+; 16/02/2025 - Tiny Player Logo (Screen Image)
+; ---------------------------------------------------------------------------
+
+align 4
+
+db 0
+db 'TINYPLAY.LBM Start', 0
+
+LOGO_ADDRESS:
+incbin "TINYPLAY.LBM"
+
+db 0
+
+db 'TINYPLAY.LBM End', 0
 
 ; ===========================================================================
 ; end of TRDOS 386 specific procedures.
@@ -15693,71 +10374,16 @@ get_current_sounddata:
 ; Initialized DATA
 ; ===========================================================================
 
-option_test     db 0
-option_mono     db 0
-option_8bit     db 0
-option_rate_shift db 0
-option_fast     db 0
-                align 4
-cpuid_flags     dd 0
-cpuid_exists    db 0
-detected_cpu    db 0
-                align 4
-mp3_output_milliseconds dd 0
-millisecond_count dd 0
-
-; 20/10/2024
-; HANDLE hProcess
-;hProcess       dd 0
-; HANDLE hThread
-;hThread        dd 0
-; DWORD dwPriorityClass
-;dwPriorityClass dd 0
-; int nPriority
-;nPriority      dd 0
+; 15/02/2025
+align 4
                    
-ttt             dd 2 dup(0)
-rdtsc_read_header db 'read header    ',0
-rdtsc_read_header_extra dd  0, 0       
-                db 'read extra     ',0
-rdtsc_read_granule dd 0, 0
-                db 'read granule   ',0
-rdtsc_append_main dd 2 dup(0)
-                db 'append main    ',0
-rdtsc_read_scalefac dd 2 dup(0)
-                db 'read scalefac  ',0
-rdtsc_xlat_scalefac dd 2 dup(0)
-                db 'xlat scalefac  ',0
-rdtsc_read_huffman dd 2 dup(0)
-                db 'read huffman   ',0
-rdtsc_ms_stereo dd 2 dup(0)
-                db 'ms stereo      ',0
-rdtsc_i_stereo  dd 2 dup(0)
-                db 'i stereo       ',0
-rdtsc_reorder   dd 2 dup(0)
-                db 'reorder        ',0
-rdtsc_antialias dd 2 dup(0)
-                db 'antialias      ',0
-rdtsc_imdct     dd 2 dup(0)
-                db 'imdct          ',0
-rdtsc_imdct36   dd 2 dup(0)
-                db ' imdct36       ',0
-rdtsc_imdct12   dd 2 dup(0)
-                db ' imdct12       ',0
-rdtsc_imdct0    dd 2 dup(0)
-                db ' imdct0        ',0
-rdtsc_synth_dct dd 2 dup(0)
-                db 'synth/dct      ',0
-rdtsc_dct32     dd 2 dup(0)
-                db ' synth.dct32   ',0
-rdtsc_synth     dd 2 dup(0)
-                db ' synth.output  ',0
-rdtsc_total     dd 2 dup(0)
-                db 'total          ',0
-mp3_bitrate_tab dw  0,32,40,48,56,64,80,96,112,128,160,192,224,256,320, 0
+mp3_bitrate_tab:
+		dw  0,32,40,48,56,64,80,96,112,128,160,192,224,256,320, 0
                 dw  0, 8,16,24,32,40,48,56,64,80,96,112,128,144,160, 0
-mp3_freq_tab    dw 44100,48000,32000   
-mp3_lsf_sf_expand_init_table db 0, 5, 4, 4, 0, 0
+mp3_freq_tab:
+		dw 44100,48000,32000   
+mp3_lsf_sf_expand_init_table:
+		db 0, 5, 4, 4, 0, 0
                 dw 400                  ; 0..399 ; normal case
                 db 0, 5, 4, 1, 0Ch, 0
                 dw 500                  ; 400..499
@@ -15769,7 +10395,8 @@ mp3_lsf_sf_expand_init_table db 0, 5, 4, 4, 0, 0
                 dw 1000                 ; 512+488 ; 360..487
                 db 1, 3, 1, 1, 3Ch, 0
                 dw 1024                 ; 512+512 ; 488..511
-mp3_synth_win_src dw      1,     0,     0,     0,     0,     0,     1,     0
+mp3_synth_win_src:
+		dw      1,     0,     0,     0,     0,     0,     1,     0
                 dw      0,     0,     1,     0,     1,     0,     1,     0
                 dw      1,     1,     0,     1,     1,     1,     1,     2
                 dw      1,     2,     1,     2,     2,     3,     2,     3
@@ -15803,15 +10430,18 @@ mp3_synth_win_src dw      1,     0,     0,     0,     0,     0,     1,     0
                 dw   29Ah,  244h,  1EDh,  195h,  13Dh,  0E2h,   88h,   2Eh
                 db    0
                 db    0
-mp3_slen_table  dw  0000h, 0100h, 0200h, 0300h, 0003h, 0101h, 0201h, 0301h
+mp3_slen_table:
+		dw  0000h, 0100h, 0200h, 0300h, 0003h, 0101h, 0201h, 0301h
                 dw  0102h, 0202h, 0302h, 0103h, 0203h, 0303h, 0204h, 0304h
-mp3_lsf_nsf_table dd  05050506h, 09090909h, 09090906h
+mp3_lsf_nsf_table:
+		dd  05050506h, 09090909h, 09090906h
                 dd  03070506h, 060C0909h, 060C0906h
                 dd  00000A0Bh, 00001212h, 0000120Fh
                 dd  00070707h, 000C0C0Ch, 000C0F06h
                 dd  03060606h, 0609090Ch, 06090C06h
                 dd  00050808h, 00090C0Fh, 00091206h
-huff_tree_list_data db  11h,   1, 10h,   0, 22h,   2, 12h, 21h
+huff_tree_list_data:
+		db  11h,   1, 10h,   0, 22h,   2, 12h, 21h
                 db  20h, 11h,   1, 10h,   0, 22h,   2, 12h
                 db  21h, 20h, 10h, 11h,   1,   0, 33h, 23h
                 db  32h, 31h, 13h,   3, 30h, 22h, 12h, 21h
@@ -15989,7 +10619,8 @@ huff_tree_list_data db  11h,   1, 10h,   0, 22h,   2, 12h, 21h
                 db    9,   8,   7,   6,   5,   4,   3,   2
                 db    1,   0
                 db 6 dup(0)
-mp3_huff_data   db   0,  0             
+mp3_huff_data:
+		db   0,  0             
                 db   1,  0              ; byte[32][2] ; table,linbits
                 db   2,  0
                 db   3,  0
@@ -16021,7 +10652,8 @@ mp3_huff_data   db   0,  0
                 db  15,  9
                 db  15, 11
                 db  15, 13
-mp3_band_size_long db    4,   4,   4,   4,   4,   4,   6,   6,   8,   8, 0Ah
+mp3_band_size_long:
+		db    4,   4,   4,   4,   4,   4,   6,   6,   8,   8, 0Ah
                 db  0Ch, 10h, 14h, 18h, 1Ch, 22h, 2Ah, 32h, 36h, 4Ch, 9Eh ; byte[9][22]
                 db    4,   4,   4,   4,   4,   4,   6,   6,   6,   8, 0Ah
                 db  0Ch, 10h, 12h, 16h, 1Ch, 22h, 28h, 2Eh, 36h, 36h,0C0h
@@ -16040,7 +10672,8 @@ mp3_band_size_long db    4,   4,   4,   4,   4,   4,   6,   6,   8,   8, 0Ah
                 db  0Ch, 0Ch, 0Ch, 0Ch, 0Ch, 0Ch, 10h, 14h, 18h, 1Ch, 20h
                 db  28h, 30h, 38h, 40h, 4Ch, 5Ah,   2,   2,   2,   2,   2
                 db 10 dup(0)            ; data align
-mp3_band_size_short db    4,   4,   4,   4,   6,   8, 0Ah, 0Ch, 0Eh, 12h, 16h, 1Eh, 38h
+mp3_band_size_short:
+		db    4,   4,   4,   4,   6,   8, 0Ah, 0Ch, 0Eh, 12h, 16h, 1Eh, 38h
                 db    4,   4,   4,   4,   6,   6, 0Ah, 0Ch, 0Eh, 10h, 14h, 1Ah, 42h ; byte[9][16] ? ; byte [9][13]
                 db    4,   4,   4,   4,   6,   8, 0Ch, 10h, 14h, 1Ah, 22h, 2Ah, 0Ch
                 db    4,   4,   4,   6,   6,   8, 0Ah, 0Eh, 12h, 1Ah, 20h, 2Ah, 12h
@@ -16050,12 +10683,14 @@ mp3_band_size_short db    4,   4,   4,   4,   6,   8, 0Ah, 0Ch, 0Eh, 12h, 16h, 1
                 db    4,   4,   4,   6,   8, 0Ah, 0Ch, 0Eh, 12h, 18h, 1Eh, 28h, 12h
                 db    8,   8,   8, 0Ch, 10h, 14h, 18h, 1Ch, 24h,   2,   2,   2, 1Ah
                 db 11 dup(0)            ; data align
-mp3_pretab      db    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0
+mp3_pretab:
+		db    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0
                 db    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0
                 db    0,   0,   0,   0,   0,   0,   0,   0,   0,   0,   0
                 db    1,   1,   1,   1,   2,   2,   3,   3,   3,   2,   0
                 db 4 dup(0)             ; data align
-mp3_mdct_win_src dd  00421D4Bh, 00DB8F02h, 019C7F16h, 029ADCC0h, 04000001h, 06246711h
+mp3_mdct_win_src:
+		dd  00421D4Bh, 00DB8F02h, 019C7F16h, 029ADCC0h, 04000001h, 06246711h
                 dd  09EE0645h, 12A7D60Ch, 3DF40538h,0BC63D32Fh,0E7B0025Bh,0F069D222h ; these are sine values divided by cosine values...
                 dd 0F4337156h,0F657D867h,0F7BCFBA8h,0F8BB5952h,0F97C4965h,0FA15BB1Ch
                 dd 0FA946D93h,0FB00518Eh,0FB5EA270h,0FBB2FDEAh,0FC000000h,0FC479F38h
@@ -16079,43 +10714,41 @@ mp3_mdct_win_src dd  00421D4Bh, 00DB8F02h, 019C7F16h, 029ADCC0h, 04000001h, 0624
                 dd 0FA946D93h,0FB00518Eh,0FB5EA270h,0FBB2FDEAh,0FC000000h,0FC479F38h
                 dd 0FC8B6609h,0FCCC9898h,0FD0C4F0Bh,0FD4B895Ch,0FD8B3FCFh,0FDCC725Eh
                 dd 0FE10392Fh,0FE57D867h,0FEA4DA7Dh,0FEF935F7h,0FF5786D9h,0FFC36AD5h
-mp3_is_table_normal dd  00000000h, 40000000h
+mp3_is_table_normal:
+		dd  00000000h, 40000000h
                 dd  0D8658BBh, 3279A746h
                 dd  176CF5D1h, 28930A30h
                 dd  20000000h, 20000000h
                 dd  28930A30h, 176CF5D1h
                 dd  3279A746h, 0D8658BBh
                 dd  40000000h, 00000000h
-mp3_is_table_lsf_src dd 80000000h      
-                                        ; sqrt based constants...
-                                        ; 40000000h*2 ; 2.0  (2^1.00) aka 2
+mp3_is_table_lsf_src:			; sqrt based constants...
+		dd 80000000h            ; 40000000h*2 ; 2.0   (2^1.00) aka 2
                 dd 6BA27E66h            ; 35D13F33h*2 ; 1.681 (2^0.75)
                 dd 5A82799Ah            ; 2D413CCDh*2 ; 1.414 (2^0.50) aka sqrt(2)
                 dd 4C1BF82Ah            ; 260DFC15h*2 ; 1.189 (2^0.25) aka sqrt(sqrt(2))
-mp3_pow2_quarters dd 80000000h         
-                                        ; 40000000h*2 ; 2^(0/4)
+mp3_pow2_quarters:
+		dd 80000000h            ; 40000000h*2 ; 2^(0/4)
                 dd 9837F052h            ; 4C1BF829h*2 ; 2^(1/4)
                 dd 0B504F334h           ; 5A82799Ah*2 ; 2^(2/4)
                 dd 0D744FCCCh           ; 6BA27E66h*2 ; 2^(3/4)
-mp3_initialized dd 0                   
-mp3_huff_num_entries dd 12h            
-wrchr_buf       db 0                   
-                align 4
-; LPCSTR mp3_src_fname
-mp3_src_fname   dd 0                   
-; LPCSTR mp3_dst_fname
-mp3_dst_fname   dd 0                   
-; LPCSTR mp3_pcm_fname
-mp3_pcm_fname   dd 0                   
-mp3_wav_header  db 'RIFF$',0,0,0,'WAVEfmt ',10h,0,0,0,1,0,2,0,0,0,0,0,0,0,0,0,4,0,10h,0,'data',0,0,0,0
+mp3_initialized:
+		dd 0                   
+mp3_huff_num_entries:
+		dd 12h            
+wrchr_buf:
+		db 0                   
+                
+num_enqueued_frames:
+		db 0
+
+; align 4
+
 ; 21/10/2024                   
-zero		dd 0  
-num_enqueued_frames db 0
-txt_decode_timing1 db 'audio duration ',0
-txt_decode_timing2 db ' milliseconds, decoded in ',0
-txt_decode_timing3 db ' milliseconds',0Dh,0Ah,0
-txt_clks_per_second db ' clock cycles per second:',0Dh,0Ah,0
-huff_tree_list_numbits db    3,   3,   2,   1,   6,   6,   5,   5
+zero		dd 0
+
+huff_tree_list_numbits:
+		db    3,   3,   2,   1,   6,   6,   5,   5
                 db    5,   3,   3,   3,   1,   6,   6,   5
                 db    5,   5,   3,   2,   2,   2,   8,   8
                 db    7,   6,   7,   7,   7,   7,   6,   6
@@ -16292,100 +10925,102 @@ huff_tree_list_numbits db    3,   3,   2,   1,   6,   6,   5,   5
                 db    4,   1,   4,   4,   4,   4,   4,   4
                 db    4,   4,   4,   4,   4,   4,   4,   4
                 db    4,   4
-_@@const_3      db 3
+_@@const_3:
+		db 3
                 db 3 dup(0)
-mp3_synth_filter_procs dd synth_16bit_shift_0_slow ; SYNTH_MACRO 0,0,0
-                dd synth_16bit_shift_1_slow ; SYNTH_MACRO 0,1,0
-                dd synth_16bit_shift_2_slow ; SYNTH_MACRO 0,2,0
-                dd synth_8bit_shift_0_slow ; SYNTH_MACRO 1,0,0
-                dd synth_8bit_shift_1_slow ; SYNTH_MACRO 1,1,0
-                dd synth_8bit_shift_2_slow ; SYNTH_MACRO 1,2,0
-                dd synth_16bit_shift_0_fast ; SYNTH_MACRO 0,0,1
-                dd synth_16bit_shift_1_fast ; SYNTH_MACRO 0,1,1
-                dd synth_16bit_shift_2_fast ; SYNTH_MACRO 0,2,1
-                dd synth_8bit_shift_0_fast ; SYNTH_MACRO 1,0,1
-                dd synth_8bit_shift_1_fast ; SYNTH_MACRO 1,1,1
-                dd synth_8bit_shift_2_fast ; SYNTH_MACRO 1,2,1
-;txt_hello      db 'nocash mp3 decoder v1.4, 2024 martin korth, press ctrl+c to quit,'
-;               db ' BDS now',0Dh,0Ah,0
+
+		; 16/02/2025
+;mp3_synth_filter_procs:
+		; 15/02/2025
+		;dd synth_16bit_shift_0_slow ; SYNTH_MACRO 0,0,0
+
 ; Erdogan Tan - 17/10/2024
-txt_hello       db 13,10
+txt_hello:	
+		db 13,10
 		;db 'NOCASH MP3 PLAYER v1.4 for Windows ',0
 		; 09/01/2025
 		;db 'NOCASH MP3 PLAYER v1.0 for TRDOS386 ',0
-		; 12/02/2025
-		db 'NOCASH MP3 PLAYER v1.0c for TRDOS386 ',0
+		; 15/02/2025
+		db 'Tiny MP3 PLAYER v1.0 for TRDOS386 by Erdogan Tan.',0
+txt_bdate:
+		db 13,10
+		db 'February 2025.',13,10,0
+		
+		db "18/02/2025", 0
 
-txt_file        db 'file: ',0
-txt_file_size   db 'file size: ',0
-txt_id3_size    db ', id3 size: ',0
-txt_tag_size    db ', tag size: ',0
-txt_input       db 'input: ',0
-txt_output      db 'output: ',0
-txt_hz          db ' hz, ',0
-txt_channels    db ' channels, ',0
-txt_bit         db ' bit',0
-txt_kbit_s      db ' kbit/s',0
-txt_not_found   db 'cannot open source file',0Dh,0Ah,0
-		; 13/02/2025
-txt_help        db 'usage: mp3play6 input.mp3 [output.wav] [verify.pcm] [/test]', 0Dh,0Ah
-                db '                          [/mono] [/8bit] [/fast] [/half|/quarter]',0Dh,0Ah,0
-_@@txt_verify1  db 'verify max difference = ',0
-_@@txt_verify1_at_mp3 db ' at mp3:',0  
-_@@txt_verify2  db ', average difference = ',0
+hex_chars:	db "0123456789ABCDEF", 0
 
-; Erdogan Tan - 17/10/2024
-               ;db 'NOCASH MP3 PLAYER v1.4 for Windows ',0
-txt_ctrlc       db '(press CTRL+C to quit)', 13,10,0
-txt_ctrlc_size = $ - txt_ctrlc
-txt_about       db 13,10
-                ;db '----------------------------------',13,10
-	        db '------------------------------------',13,10
-                db 'Erdogan Tan - 14/02/2025 (Assembler: FASM)', 13,10
-                db 'Original code: MP3PLAYER.EXE v1.4 (20/09/2024)', 13,10
-                db '               by Martin Korth (TASM source code)'
-                db 13,10,13,10,0
-                db 'v1.4.0'
+msgAC97Info:	db 0Dh, 0Ah
+		db "AC97 Audio Controller & Codec Info", 0Dh, 0Ah
+		db "Vendor ID: "
+msgVendorId:	db "0000h Device ID: "
+msgDevId:	db "0000h", 0Dh, 0Ah
+		db "Bus: "
+msgBusNo:	db "00h Device: "
+msgDevNo:	db "00h Function: "
+msgFncNo:	db "00h"
+		db 0Dh, 0Ah
+
+		db "NAMBAR: "
+msgNamBar:	db "0000h  "
+		db "NABMBAR: "
+msgNabmBar:	db "0000h  IRQ: "
+msgIRQ:		dw 3030h
+		db 0Dh, 0Ah, 0
+
+msgFileName:	db 0Dh, 0Ah, "File Name: ",0
+msgSampleRate:	db 0Dh, 0Ah, "Sample Rate: "
+msgHertz:	db "00000 Hz", 0 
+msgKBitRate:	db 0Dh, 0Ah, "Bit Rate: ", 0
+msgKBits:	db " kbit/s", 0
+msgPlayback:	db 0Dh, 0Ah, "Playback: ", 0
+; 17/02/2025
+;msg8Bits:	db "8 bits, ", 0 
+msgMono:	db "Mono", 0Dh, 0Ah, 0
+msg16Bits:	db "16 bits, ", 0
+msgStereo:	db "Stereo"
+nextline:	db 0Dh, 0Ah, 0
+
+; 15/02/2025
+msgDuration:	db 0Dh, 0Ah	
+		db "Duration: "
+msgMinSec:	db "00:00 (minute:second)"
+		db 0Dh, 0Ah, 0	
+
+msgVRAheader:	db "VRA support: "
+		db 0	
+msgVRAyes:	db "YES", 0Dh, 0Ah, 0
+msgVRAno:	db "NO ", 0Dh, 0Ah
+		db "(Interpolated sample rate playing method)"
+		db 0Dh, 0Ah, 0
+
+msgSB16Info:	db 0Dh, 0Ah
+		db " Audio Hardware: Sound Blaster 16", 0Dh, 0Ah
+		db "      Base Port: "
+msgBasePort:
+		db "000h", 0Dh, 0Ah
+		db "            IRQ: "
+msgSB16IRQ:
+		db 30h
+		db 0Dh, 0Ah, 0
+
+		; 15/02/2025
+txt_help:	db 'usage: tmp3play filename.mp3',0Dh,0Ah,0
+
+txt_original:	db 13,10
+		db 'Original code: ', 13,10
+		db '         Nocash MP3 Decoder/Player', 13,10
+		db '         MP3PLAYER.EXE v1.4 (20/09/2024)', 13,10
+		db '         by Martin Korth (TASM source code)'
+		db 13,10,0
+		db 'v1.4.0'
 ; 10/01/2025
-half_buffer	db 0
+half_buffer:	db 0
 
 ; 13/02/2025
 msgPressAKey:	db 0Dh, 0Ah
 		db ' ... press a key to continue ... '
 		db 0Dh, 0Ah, 0Dh, 0Ah, 0
-
-; ---------------------------------------------------------------------------
-; 12/02/2025 - Player Window
-; ---------------------------------------------------------------------------
-
-		; 12/02/2025
-PlayingScreen:
-		db  8 dup(219), " NOCASH MP3 PLAYER v1.0 ", 8 dup(219)
-		db  201, 38 dup(205), 187
-		db  186, " <Space> Play/Pause  <Enter> Color    ", 186
-		db  186, " <S>     Stop        <+>/<-> Volume   ", 186
-		db  186, " <F>/<B> Forw/Backw  <Q>     Quit Prg ", 186
-		db  204, 38 dup(205), 185
-		db  186, " File:               Size: 0          ", 186
-		db  186, " Freq: 0     Hz      Play: 0     Hz   ", 186
-		db  186, " Chan: 0                 : 0          ", 186
-		db  186, " Bits: 0                 : 0  bits    ", 186
-		db  200, 38 dup(205), 188
-		db  40 dup(32)
-		db  40 dup(32)
-		db  40 dup(32)
-		db  40 dup(32)
-		db  40 dup(32)
-		db  40 dup(32)
-		db  40 dup(32)
-		db  40 dup(32)
-		db  40 dup(32)
-		db  40 dup(32)
-		db  40 dup(32)
-		db  40 dup(205)
-		db  40 dup(32)
-		db  13 dup(32), "00:00 ", 174, 175, " 00:00", 4 dup(32), "VOL 000%"
-		db  0
 
 ; ---------------------------------------------------------------------------
 
@@ -16416,6 +11051,26 @@ trdos386_err_msg:
 
 ; ---------------------------------------------------------------------------
 
+; 15/02/2025
+noDevMsg:	db 10,13
+		db 'Error: Unable to find a proper audio device !'
+		db 10,13,0
+
+; ---------------------------------------------------------------------------
+
+; 15/02/2025
+txt_not_found:
+noFileErrMsg:	db 10,13
+		db 'Error: File not found !',10,13,0
+
+; ---------------------------------------------------------------------------
+
+; 15/02/2025
+not_valid_mp3f:	db 10,13
+		db 'Not a proper/valid MP3 file !',10,13,0
+
+; ---------------------------------------------------------------------------
+
 EOF:
 
 ; ===========================================================================
@@ -16424,282 +11079,296 @@ EOF:
 
 align 4
 
-; 13/02/2025
+; 15/02/2025
 bss_start:
 
-;ABSOLUTE bss_start
+ABSOLUTE bss_start
 
+;------------------------------------------------------------------------------
+; IFF/ILBM DATA
+;------------------------------------------------------------------------------
+
+picture.width:	resd 1 	; current picture width and height
+picture.height:	resd 1
+
+;------------------------------------------------------------------------------
+
+; 16/02/2025 (tmp3play.s)
 ; 13/02/2025
 ; 12/02/2025 (mp3play6.s)
 ; 05/02/2025 (cgaplay.s)
-;graphstart	rd 1	; start (top) line/row for wave lighting points
-screenpos 	rd 1	; hw = (cursor) row, lw = (cursor) column
-wcolor		rd 1
-columns		rb 1
-pbprev		rb 1	; previous progress bar indicator position
-; 13/02/2025
-wpoints		rb 1
-indicator	rb 1
 
-align 4
+alignb 4
 
 ; 25/01/2025
-stream_size	rd 1
+stream_size	resd 1
 ; 13/02/2025
-;turn_on_leds	rd 1
+;turn_on_leds	resd 1
 ; 22/01/2025
-stream_begin	rd 1
-fb_count	rd 1
-; 26/01/2025
-draw_wave_points rd 1
+stream_begin	resd 1
+fb_count	resd 1
 
 ; 26/01/2025
-sd_count	rd 1
+sd_count	resd 1
 
 ; 12/01/2025
 ;;;;
 ; AC97 specific
-bus_dev_fn	rd 1
-dev_vendor	rd 1
-NAMBAR		rw 1
-NABMBAR		rw 1
+bus_dev_fn	resd 1
+dev_vendor	resd 1
+NAMBAR		resw 1
+NABMBAR		resw 1
 ; SB16 specific
-audio_io_base	rd 1
+audio_io_base	resd 1
 ac97_int_ln_reg:
-audio_intr	rb 1
+audio_intr	resb 1
 ;;;;
 
 ; 13/02/2025
-; 21/01/2025
-;wleds		rb 1
-stopped		rb 1
-; 26/01/2025
-;p_mode		rb 1
+stopped		resb 1
 
-align 4
+alignb 4
 
 ;;;
 ; 24/01/2025
 ; 20/10/2024 (TRDOS 386 specific parameters)
-audio_hardware	rb 1
-vra		rb 1
-;max_frequency	rw 1
-srb		rb 1
-;volume_level	rb 1
-blocks		rb 1
-;		rb 1
-buffer_size	rd 1
+audio_hardware	resb 1
+vra		resb 1
+srb		resb 1
+blocks		resb 1
+buffer_size	resd 1
 ;;;
 
-; 22/01/2025
-TotalTime	rd 1
-ProgressTime	rd 1
 ; 23/05/2025
-timerticks	rd 1
+timerticks	resd 1
 
 ; 15/01/2025 (FASM)
 ;;;;
 ; 13/01/2025 (Interpolation parameters)
-conversion	rd 1	; pointer to convers(t)ion
-			; or interpolation proc address
-loadsize	rd 1	; decoding buffer size
-interpolation	rb 1	; interpolation status
-counter		rb 1	; 15/01/2025
+conversion	resd 1	; pointer to convers(t)ion
+;			; or interpolation proc address
+loadsize	resd 1	; decoding buffer size
+interpolation	resb 1	; interpolation status
+
+;------------------------------------------------------------------------------
 
 ; 25/01/2025
-align 4
+alignb 4
 
+; 15/02/2025
 mp3_context_start:
-main_data_pool_start	rb 4096
-main_data_pool_wr_ptr	rd 1
-mp3_src_data_location	rd 1
-mp3_src_frame_size	rd 1
-mp3_src_frame_end	rd 1
-mp3_hdr_32bit_header	rd 1
-mp3_hdr_flag_crc	rd 1
-mp3_hdr_flag_mpeg25	rd 1
-mp3_hdr_flag_padding	rd 1
-mp3_sample_rate		rd 1
-mp3_hdr_sample_rate_index rd 1
-mp3_bit_rate		rd 1
-mp3_src_num_channels	rd 1
-mp3_output_num_channels rd 1
-mp3_output_sample_rate	rd 1
-mp3_bytes_per_sample	rd 1
-mp3_curr_syn_index	rd 1
-mp3_curr_syn_dst	rd 1
-mp3_nb_frames		rd 1
-mp3_hdr_mode_val	rd 1
-mp3_hdr_mode_ext	rd 1
-mp3_hdr_flag_lsf	rd 1
-mp3_synth_filter_proc	rd 1
+main_data_pool_start	resb 4096
+main_data_pool_wr_ptr	resd 1
+mp3_src_data_location	resd 1
+mp3_src_frame_size	resd 1
+mp3_src_frame_end	resd 1
+mp3_hdr_32bit_header	resd 1
+mp3_hdr_flag_crc	resd 1
+mp3_hdr_flag_mpeg25	resd 1
+mp3_hdr_flag_padding	resd 1
+mp3_sample_rate		resd 1
+mp3_hdr_sample_rate_index resd 1
+mp3_bit_rate		resd 1
+mp3_num_channels	resd 1
+; 17/02/2025
+;mp3_bytes_per_sample	resd 1
+mp3_curr_syn_index	resd 1
+mp3_curr_syn_dst	resd 1
+mp3_nb_frames		resd 1
+mp3_hdr_mode_val	resd 1
+mp3_hdr_mode_ext	resd 1
+mp3_hdr_flag_lsf	resd 1
 
-mp3_synth_buf   rd 2048
-mp3_synth_index rd 2
-mp3_sb_samples  rd 2304
+mp3_synth_buf   resd 2048
+mp3_synth_index resd 2
+mp3_sb_samples  resd 2304
 				; MP3_MAX_CHANNELS*36*SBLIMIT
-mp3_mdct_buf    rd 1152
+mp3_mdct_buf    resd 1152
 				; MP3_MAX_CHANNELS*SBLIMIT*18
-mp3_free_format_frame_size rd 1
+mp3_free_format_frame_size resd 1
 
-mp3_curr_vfrac_bits rb 1
+mp3_curr_vfrac_bits resb 1
 
-align 4
+alignb 4
 
-mp3_xing_id     rd 1
-mp3_xing_flags  rd 1
-mp3_xing_frames rd 1
-mp3_xing_filesize rd 1
-mp3_xing_toc    rb 100
-mp3_xing_vbr_scale rd 1
-mp3_file_size   rd 1
-mp3_id3_size    rd 1
-mp3_tag_size    rd 1
+mp3_xing_id     resd 1
+mp3_xing_flags  resd 1
+mp3_xing_frames resd 1
+mp3_xing_filesize resd 1
+mp3_xing_toc    resb 100
+mp3_xing_vbr_scale resd 1
+mp3_file_size   resd 1
+mp3_id3_size    resd 1
+mp3_tag_size    resd 1
 
-mp3_num_frames_decoded	rd 1
-mp3_total_output_size	rd 1
-mp3_samples_dst		rd 1
+mp3_num_frames_decoded	resd 1
+mp3_samples_dst		resd 1
 ; DWORD mp3_samples_output_size
-mp3_samples_output_size	rd 1
-mp3_samples_dst_step	rd 1
+mp3_samples_output_size	resd 1
+mp3_samples_dst_step	resd 1
 
-mp3_curr_channel	rd 1
-mp3_curr_granule	rd 1
-mp3_curr_frame		rd 1
+mp3_curr_channel	resd 1
+mp3_curr_granule	resd 1
+mp3_curr_frame		resd 1
 
-mp3_bitstream_start	rd 1
-mp3_src_remain		rd 1
-mp3_extra_bytes		rd 1
-mp3_main_data_begin	rd 1
-mp3_num_compress_bits	rd 1
+mp3_bitstream_start	resd 1
+mp3_src_remain		resd 1
+mp3_extra_bytes		resd 1
+mp3_main_data_begin	resd 1
+mp3_num_compress_bits	resd 1
 
-mp3_nb_granules rd 1
+mp3_nb_granules resd 1
 
-mp3_granules		rb 9856
-mp3_exponents		rw 576
-huff_tree_buf		rb 0B800h
-mp3_band_index_long	rw 288
-mp3_table_4_3_exp	rb 32828
+mp3_granules		resb 9856
+mp3_exponents		resw 576
+huff_tree_buf		resb 0B800h
+mp3_band_index_long	resw 288
+mp3_table_4_3_exp	resb 32828
 
-mp3_table_4_3_value	rd 32828
-mp3_exp_table		rd 512
-mp3_expval_table	rd 8192
-mp3_mdct_win		rd 288
-mp3_is_table_lsf	rd 512
-mp3_synth_win		rd 1024
-mp3_lsf_sf_expand_exploded_table rb 8192
+mp3_table_4_3_value	resd 32828
+mp3_exp_table		resd 512
+mp3_expval_table	resd 8192
+mp3_mdct_win		resd 288
+mp3_is_table_lsf	resd 512
+mp3_synth_win		resd 1024
+mp3_lsf_sf_expand_exploded_table resb 8192
 mp3_context_end:
-_@@region_address0	rd 1
-_@@region_address1	rd 1
-_@@saved_sp		rd 1
-mp3_main_data_siz	rd 1
-_@@scfsi        rd 1
-_@@gains        rd 3
-_@@rle_point    rd 1
-_@@III          rd 1
-_@@JJJ          rd 1
-_@@linbits      rd 1
-_@@vlc_table    rd 1
-_@@coarse_end   rd 1
+_@@region_address0	resd 1
+_@@region_address1	resd 1
+_@@saved_sp		resd 1
+mp3_main_data_siz	resd 1
+_@@scfsi        resd 1
+_@@gains        resd 3
+_@@rle_point    resd 1
+_@@III          resd 1
+_@@JJJ          resd 1
+_@@linbits      resd 1
+_@@vlc_table    resd 1
+_@@coarse_end   resd 1
 
-_@rle_point     rd 1
-_@@rle_ptr      rd 1
-_@@rle_val      rd 1
-_@@rle_val_x_40h rd 1
-_@@max_bands    rb 4
-_@@max_blocks   rd 1
-_@@max_pos      rd 1
-_@@sfb_array    rb 40
-_@@is_tab       rd 1
-_@@n_long_sfb   rd 1
-_@@n_short_sfb  rd 1
-_@@n_sfb        rd 1
-_@@tmp          rb 2304
-_@@s0           rd 1
-_@@s2           rd 1
-_@@s3           rd 1
+_@rle_point     resd 1
+_@@rle_ptr      resd 1
+_@@rle_val      resd 1
+_@@rle_val_x_40h resd 1
+_@@max_bands    resb 4
+_@@max_blocks   resd 1
+_@@max_pos      resd 1
+_@@sfb_array    resb 40
+_@@is_tab       resd 1
+_@@n_long_sfb   resd 1
+_@@n_short_sfb  resd 1
+_@@n_sfb        resd 1
+_@@tmp          resb 2304
+_@@s0           resd 1
+_@@s2           resd 1
+_@@s3           resd 1
 
-_@@@tmp         rd 18 ; rb 72
-_@@tmp0         rd 1
-_@@tmp1         rd 1
-_@@tmp2         rd 1
-_@@tmp3         rd 1
-_@@tmp4         rd 1
-_@@tmp5         rd 1
-mp3_out2_a0     rd 1
-mp3_out2_a1     rd 1
-mp3_out2_a2     rd 1
-mp3_out2_b0     rd 1
-mp3_out2_b1     rd 1
-mp3_out2_b2     rd 1
-                rd 1
-                rd 1
-_@@@JJJ         rd 1
-_@@www          rd 1
-_@@mdct_long_end rd 1
-_@@sblimit      rd 1
-_@@switch_point rd 1
-mp3_huff_tmp_bits	rb 256
-mp3_huff_tmp_codes	rb 512
-_@@table_nb_bits	rd 1
-_@@nb_codes		rd 1
-_@@prefix_numbits	rd 1
-_@@prefix_pattern	rd 1
-_@@curr_table_size	rd 1
-_@@curr_table_mask	rd 1
-_@@curr_table_index	rd 1
-_@@granule_addr		rd 1
+_@@@tmp         resd 18 ; resb 72
+_@@tmp0         resd 1
+_@@tmp1         resd 1
+_@@tmp2         resd 1
+_@@tmp3         resd 1
+_@@tmp4         resd 1
+_@@tmp5         resd 1
+mp3_out2_a0     resd 1
+mp3_out2_a1     resd 1
+mp3_out2_a2     resd 1
+mp3_out2_b0     resd 1
+mp3_out2_b1     resd 1
+mp3_out2_b2     resd 1
+                resd 1
+                resd 1
+_@@@JJJ         resd 1
+_@@www          resd 1
+_@@mdct_long_end resd 1
+_@@sblimit      resd 1
+_@@switch_point resd 1
+mp3_huff_tmp_bits	resb 256
+mp3_huff_tmp_codes	resb 512
+_@@table_nb_bits	resd 1
+_@@nb_codes		resd 1
+_@@prefix_numbits	resd 1
+_@@prefix_pattern	resd 1
+_@@curr_table_size	resd 1
+_@@curr_table_mask	resd 1
+_@@curr_table_index	resd 1
+_@@granule_addr		resd 1
 ; HANDLE hFile
-hFile           rd 1
+hFile           resd 1
 ; HANDLE hMap
-;hMap           rd 1
-stream_start    rd 1
-stream_pos      rd 1
-bytes_left      rd 1
+;hMap           resd 1
+stream_start    resd 1
+stream_pos      resd 1
+bytes_left      resd 1
 
-; 20/10/2024
-; DWORD diskresult
-;diskresult     rd 1
-; HANDLE std_out
-;std_out        rd 1
-;cmdline_buf    rb 1024
-cmdline_buf	rb 128
-; HANDLE mp3_wav_handle
-mp3_wav_handle  rd 1
-; HANDLE mp3_pcm_handle
-mp3_pcm_handle  rd 1
-_@@max_diff     rd 1
-_@@avg_diff     rd 2
-pcm_filepos     rd 1
-_@@mono_convert rd 1
-_@@pcm_steps    rw 2
-_@@worst_pcm_filepos rd 1
-_@@worst_mp3_filepos rd 1
-		rd 1
-align 4
+; 17/02/2025
+;; 20/10/2024
+;; DWORD diskresult
+;;diskresult     resd 1
+;; HANDLE std_out
+;;std_out        resd 1
+;;cmdline_buf    resb 1024
+;cmdline_buf	resb 128
+;; HANDLE mp3_wav_handle
+;mp3_wav_handle  resd 1
+;; HANDLE mp3_pcm_handle
+;mp3_pcm_handle  resd 1
+;_@@max_diff     resd 1
+;_@@avg_diff     resd 2
+;pcm_filepos     resd 1
+;_@@mono_convert resd 1
+;_@@pcm_steps    resw 2
+;_@@worst_pcm_filepos resd 1
+;_@@worst_mp3_filepos resd 1
+;		resd 1
 
-; 12/02/2025
-prev_points	rd 320 ; previous wave points (which are lighting)
+;------------------------------------------------------------------------------
 
-; 24/01/2025
-txtfilesize	rb 20
+; 15/02/2025
+
+alignb 16
+
+RowOfs		resw 256
+
+NewScope_L	resw 256
+NewScope_R	resw 256
+OldScope_L	resw 256
+OldScope_R	resw 256
+
+;------------------------------------------------------------------------------
+
+mp3_file_name	resb 80 ; wave file, path name (<= 80 bytes)
+
+		resd 1
+txtSize		resd 1
+
+;------------------------------------------------------------------------------
 
 ; 10/01/2025
-align 4096
+alignb 4096
 
 ; 27/01/2025
 ; 15/01/2025
-decoding_buffer rb 8192  ; 2*4096 (max. 4608)
-sample_buffer	rb 36864 ; 8*4608
+decoding_buffer resb 8192  ; 2*4096 (max. 4608)
+sample_buffer	resb 36864 ; 8*4608
+
+;------------------------------------------------------------------------------
 
 ; 26/01/2025
-;align 4096
+;alignb 4096
 
-; 12/02/2025
-sounddata	rb 320*4 ; For Graphics mode (320 wave points)
+; 15/02/2025
+sounddata_copy	resd 1	; address pointer for fast (conversion) copy
+get_sound_data	resd 1	; procedure pointer
+
+; 16/02/2025
+alignb 4096
+
+sounddata	resb 1024 ; 16 bit stereo samples for wave scope display
+sounddata2	resb 512 ; temporary buffer
 
 ; 26/01/2025
-align 4096
+alignb 4096
 
 end_of_bss:
 
