@@ -6,7 +6,7 @@
 ;
 ; 15/02/2025
 ;
-; [ Last Modification: 18/02/2025 ]
+; [ Last Modification: 20/02/2025 ]
 ;
 ; Modified from 'mp3play6.s' (14/02/2025) and 'twavply3.s' (10/02/2025)
 ;
@@ -148,6 +148,7 @@ _dev_not_ready:
 
 		; ---------------------------------------------------
 
+		; 20/02/2025
 		; 15/02/2025 - tmp3play.s
 		; 10/02/2025 - twavply3.s
 GetFileName:
@@ -179,7 +180,7 @@ _y:
 		je	short ScanName	; scan start of name.
 		stosb
 		mov	ah, 0FFh
-a_0:	
+a_0:
 		inc	ah
 a_1:
 		inc	ecx
@@ -192,7 +193,8 @@ a_1:
 		and	ah, ah
 		jz	short a_2
 
-		cmp	al, '\'
+		; 20/02/2025
+		cmp	al, '/'
 		jne	short a_2
 		mov	ah, 0
 a_2:
@@ -211,13 +213,13 @@ SetExt:
 					    ;   destroy the following data
 					; so, 80 bytes path + 0 is possible here
 		add	edi, 4
-a_4:	
+a_4:
 		mov	byte [edi], 0
-	
+
 		cmp	byte [mp3_file_name], 20h
 		ja	short mp3_filename_chk
 
-pmsg_usage: 
+pmsg_usage:
 		sys	_msg, txt_help, 255, 0Fh
 
 		jmp	ExitP@
@@ -10946,7 +10948,7 @@ txt_bdate:
 		db 13,10
 		db 'February 2025.',13,10,0
 		
-		db "18/02/2025", 0
+		db "20/02/2025", 0
 
 hex_chars:	db "0123456789ABCDEF", 0
 
