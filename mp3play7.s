@@ -734,8 +734,9 @@ exit@@@:
 		
 		;;;;
 		; 23/02/2025
-		mov	dword [mp3_initialized], 0
-		; (reset to initial value is needed)
+		;mov	dword [mp3_initialized], 0
+		; 23/02/2025
+		; (reset to the initial value is needed)
 		mov	dword [mp3_huff_num_entries], 12h ; 18
 		;;;;
 
@@ -6719,6 +6720,7 @@ mp3_decode_frame:
 
 ; =============== S U B R O U T I N E =======================================
 
+		; 23/02/2025
 		; 16/02/2025
 		; 15/02/2025
 mp3_init:
@@ -6728,8 +6730,9 @@ mp3_init:
                 xor     eax, eax        ; ERRIF @@len AND 03h
                 rep stosd               ; clear context
                 mov	dword [main_data_pool_wr_ptr], main_data_pool_start
-                cmp     dword [mp3_initialized], 0
-                jnz     short .already_initialized
+		; 23/02/2025
+		;cmp	dword [mp3_initialized], 0
+                ;jnz	short .already_initialized
                 call    mp3_integer_init_is_stereo_lsf
                 call    mp3_integer_init_mdct_windows
                 call    mp3_integer_init_table_4_3
@@ -6739,10 +6742,11 @@ mp3_init:
                 call    mp3_any_init_lsf_sf_expand
                 call    mp3_any_init_huff_tables
                 call    mp3_init_log_constants
+		; 23/02/2025
 		; 15/02/2025
-                mov     dword [mp3_initialized], 1
+		;mov     dword [mp3_initialized], 1
 
-.already_initialized:
+;.already_initialized:
 		; 17/02/2025
 		; 16/02/2025
 		;mov	dword [mp3_bytes_per_sample], 2
