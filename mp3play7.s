@@ -493,9 +493,9 @@ mp3_file_ready:
 		; 22/02/2025
 		mov	eax, 640
 		mov	ebx, turn_on_leds_stereo_16bit
-		;mov	dl, 1
-		;cmp	byte [audio_hardware], dl ; 1
-		cmp	byte [audio_hardware], 1
+		; 23/02/2025
+		mov	dl, 1
+		cmp	byte [audio_hardware], dl ; 1
 		ja	short .stolp_s16 ; AC97
 		; SB16		
 		cmp	byte [mp3_num_channels], dl ; 1
