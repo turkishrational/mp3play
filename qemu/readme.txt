@@ -20,7 +20,7 @@ for non-VRA AC97 codecs.
 program overwrites vra parameter for using interpolation procedures.)
 
 Non-VRA codecs only play 48kHZ mp3/wav files at normal speed.
-MY "Interpolated sample rate playing method" converts
+My "Interpolated sample rate playing method" converts
 samples/waves to 48 kHZ, 16bit, stereo samples/waves by inserting
 proper count of interpolated (before-interpolated-next) 
 additional samples between original mp3/wav audio samples without
