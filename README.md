@@ -25,11 +25,11 @@ So, i have decided to disassemble mp3play.exe (v1.4, 20/09/2024) by using HEX-RA
 But another difficulty is to convert disassembled ASM code to FASM or NASM syntax. (I have preferred FASM because of direct assemble/link ability for Windows PE files.
 I have decided to write the Windows version of the modified (nocash) mp3 player before the TRDOS 386 adaption/version of it.
 After a searching phase, by help of FASM examples, I have converted Windows kernel/dll function calls to proper forms of FASM '.idata' section for PE format.
-(Succesful finish: at the end of 17/10/2024. My MP3 player source code needs to be more edited, still it is as disassembled -semi raw- source code. 
+((Succesful finish: at the end of 17/10/2024. My MP3 player source code needs to be more edited, still it is as disassembled -semi raw- source code. 
 
 But this source code (view) modifications/fixes would not affect EXE file. (Except any possible bugfixes and optimizations.) 
 
-Perhaps I can modify and optimize source code in near future for increasing speed and decreasing file size. This will be depended on TRDOS 386 adaptation of the nocash MP3 player.)
+Perhaps I can modify and optimize source code in near future for increasing speed and decreasing file size. This will be depended on TRDOS 386 adaptation of the nocash MP3 player.))
 
 NOTE: TRDOS 386 adaptation/port of this MP3 player is not ready yet. (18/10/2024)
 
